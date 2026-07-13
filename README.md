@@ -1,3 +1,7 @@
+
+read 
+[AGENTS.md](file;file:///d%3A/Project/devbook/AGENTS.md) 
+and follow the reading order specified .Confirm once you have read all context files and are ready to build
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.

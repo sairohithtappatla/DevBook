@@ -12,19 +12,19 @@ Every completed milestone must be checked before starting the next one.
 
 **Current Phase**
 
-Project Foundation
+Home Page
 
 **Last Completed**
 
-None
+Authentication Logic, Session Persistence & Logout
 
 **Currently Working**
 
-Project Structure
+Home Page UI
 
 **Next Milestone**
 
-Application Layout
+Home Page UI
 
 ---
 
@@ -85,11 +85,11 @@ Application Layout
 
 ### Authentication
 
-* [ ] 31 Login Page UI
-* [ ] 32 Register Page UI
-* [ ] 33 Authentication Logic
-* [ ] 34 Session Persistence
-* [ ] 35 Logout
+* [x] 31 Login Page UI
+* [x] 32 Register Page UI
+* [x] 33 Authentication Logic
+* [x] 34 Session Persistence
+* [x] 35 Logout
 
 ---
 
@@ -181,6 +181,9 @@ Example
 * Markdown is the source of truth.
 * Sidebar navigation is generated automatically.
 * Readers always see the latest published version.
+* Login page is implemented as a token-based React screen using `public/login.png` for the brand illustration and `public/logo.svg` for the mark.
+* Added the `@/*` TypeScript/Vite alias to support the required absolute import convention.
+* Added `lucide-react` because it is the approved icon library in the project architecture and UI registry.
 
 ---
 

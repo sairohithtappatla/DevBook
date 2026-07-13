@@ -447,6 +447,63 @@ Follower / Following item.
 
 # Shared Components
 
+## LoginPage
+
+Purpose
+
+Full authentication entry screen matching the approved login reference.
+
+Used In
+
+* Login
+
+Location
+
+```text
+src/routes/login/LoginPage.tsx
+```
+
+Props
+
+None.
+
+Variants
+
+* Desktop split layout
+* Responsive stacked layout
+
+States
+
+* Dynamic Modes: `login`, `signup`, `forgot-password` (handled in local state)
+* Default, Hover, Focus on inputs/buttons
+* Password visibility toggle
+
+Usage Notes
+
+Uses the public `login.png` illustration as the left brand panel background and `logo.svg` in the brand mark. The right panel dynamically renders the sign-in form, sign-up form (adds Name input), or forgot-password form (email only) depending on the active state. Standardized inputs, social buttons, primary submit buttons, and trust messages are used throughout. All colors stay on DevBook tokens.
+
+### LoginPage Pattern
+
+File: `src/routes/login/LoginPage.tsx`
+Last updated: 2026-07-13
+
+| Property         | Class                                                                 |
+| ---------------- | --------------------------------------------------------------------- |
+| Background       | `bg-surface-secondary`, `bg-surface`, `bg-code-background`            |
+| Border           | `border border-border`                                                |
+| Border radius    | `rounded-xl`, `rounded-md`, `rounded-full`                            |
+| Text primary     | `text-text-primary`, `text-code-foreground`                           |
+| Text secondary   | `text-text-secondary`, `text-text-muted`, `text-code-foreground/85`   |
+| Spacing          | `p-5`, `px-8 py-8`, `gap-2`, `gap-3.5`, `gap-6`                       |
+| Hover state      | `hover:bg-surface-secondary`, `hover:bg-[#1E293B] dark:hover:bg-[#2D3748]` |
+| Focus state      | `focus:ring-2 focus:ring-primary`, `focus-within:ring-2`              |
+| Shadow           | `shadow-xs`, `shadow-md`                                              |
+| Accent usage     | `text-primary`, `accent-primary`                                      |
+| Animation        | `animate-fade-in` (200ms cubic-bezier transition)                     |
+
+**Pattern notes:**
+Login uses a two-panel documentation-product auth pattern: a dark asset-backed brand panel paired with a quiet white form panel. Inputs and buttons keep the same `h-11`/`h-12`, `rounded-md`, `border-border`, and token focus ring pattern. Handles inline OTP input fields with `gap-2` spacing and automated navigation. The layout transitions smoothly using the custom `@keyframes fadeIn` 200ms fade transition.
+
 ## SearchBar
 
 Used on
@@ -635,3 +692,27 @@ No component should exist without being registered.
 * Shared components are always preferred over page-specific implementations.
 * Documentation components must remain reusable between the Reader and the Editor.
 * Visual consistency is more important than introducing new styles.
+
+---
+
+### LoginPage
+
+File: [LoginPage.tsx](file:///d:/Project/devbook/src/routes/login/LoginPage.tsx)
+Last updated: 2026-07-13
+
+| Property         | Class                                                            |
+| ---------------- | ---------------------------------------------------------------- |
+| Background       | `bg-background` (right panel), `bg-surface-secondary` / `dark bg-[#010409]` (wrapper), `bg-code-background` (left brand panel) |
+| Border           | `border-border`                                                  |
+| Border radius    | `rounded-[24px]` (main container), `rounded-md` (inputs, buttons), `rounded-xl` (interactive overlays) |
+| Text — primary   | `text-text-primary` (light/dark form labels & body headers), `text-white` (brand headers) |
+| Text — secondary | `text-text-secondary` (light/dark subtitles & form helpers)      |
+| Spacing          | `gap-3.5` (form fields), `gap-2` (OTP boxes), `px-8 lg:px-12` (panel margins) |
+| Hover state      | `hover:bg-[#1E293B] dark:hover:bg-[#2D3748]` (submit buttons), `hover:bg-surface-secondary` (OAuth/theme buttons) |
+| Shadow           | `shadow-md` (main container), `shadow-xs` (buttons)              |
+| Accent usage     | `text-primary`, `bg-primary`, `accent-primary`, text color `#818CF8` (brand subtitle) |
+
+**Pattern notes:**
+- Implements a modern multi-state auth interface inside a single wrapper (Login, Sign-Up with OTP verification, Forgot Password with OTP validation & Password reset) using inline transitions to prevent layout shifts.
+- Button loaders are rendered inline inside submit buttons rather than using page blurs.
+- Theme switching is implemented via class-based re-mapping of tailwind tokens (`.dark`).
