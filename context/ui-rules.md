@@ -184,6 +184,8 @@ Contains only
 ```text
 Home
 
+Featured Books
+
 My Books
 
 My Progress
@@ -217,7 +219,7 @@ Contains
 Height
 
 ```text
-72px
+64px
 ```
 
 Always white.
@@ -554,6 +556,15 @@ Use a consistent spacing scale.
 ```
 
 Never invent custom spacing values.
+
+---
+
+# Horizontal Carousels & Catalog Layouts
+
+* **Home View Carousel**: Renders guides horizontally in a single row utilizing Framer Motion. Uses inertia wheel translation and boundaries escape triggers to allow scrolling vertically when the carousel bounds are reached.
+* **Catalog Browse Grid**: Displays full width (right panel removed) on the Featured tab using a multi-column BookGrid with pagination controls.
+* **Dynamic Row Limits**: Pagination limits cards to exactly 4 rows based on the viewport width (16 on desktop, 12 on tablet, 8 on mobile).
+* **Inline Filters Row**: Category filters on catalog views are rendered inline horizontally next to the section subtitle, using solid black highlights for the active indicator.
 
 ---
 

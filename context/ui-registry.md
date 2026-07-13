@@ -716,3 +716,71 @@ Last updated: 2026-07-13
 - Implements a modern multi-state auth interface inside a single wrapper (Login, Sign-Up with OTP verification, Forgot Password with OTP validation & Password reset) using inline transitions to prevent layout shifts.
 - Button loaders are rendered inline inside submit buttons rather than using page blurs.
 - Theme switching is implemented via class-based re-mapping of tailwind tokens (`.dark`).
+
+### AppShell Layout
+
+File: [AppShell.tsx](file:///d:/Project/devbook/src/components/layout/AppShell.tsx)
+Last updated: 2026-07-13
+
+| Property | Value / Pattern |
+| --- | --- |
+| Max Width | `w-screen h-screen overflow-hidden` (strict viewport lock) |
+| Left Sidebar | `w-[180px]` permanent (`>= 1024px`), drawer (`< 1024px`) |
+| Top Nav | Height `h-16` (64px) fixed, contains search context integration |
+| Right Panel | `w-[300px]` permanent (`>= 1280px`), hidden/relocated (`< 1280px`) |
+| Scrollbars | Low contrast webkit scrollbars (`6px` wide, border-color color) |
+
+**Pattern notes:**
+- Pins header and sidebars, making only the CenterFeed scrollable using `ScrollArea`.
+- Restricts vertical layouts using React responsive rendering, keeping only a single instance of widgets (e.g. Categories, TopCreators) active at a time.
+
+### BookCard & BookGrid
+
+File: [BookCard.tsx](file:///d:/Project/devbook/src/components/books/BookCard.tsx)
+Last updated: 2026-07-13
+
+| Property | Style / Tokens |
+| --- | --- |
+| Card Border | `border border-border rounded-xl shadow-xs` |
+| Hover State | `hover:border-primary/30 hover:shadow-sm transition-all` |
+| Cover Banner | Aspect `video` w-full border-b border-border |
+| Fallbacks | Pseudo-random gradient generation based on Title string |
+
+**Pattern notes:**
+- Dynamic aspect-ratio responsive grid layout resizing between 1-4 columns based on breakpoints.
+- Flexible variants: `"grid"`, `"feed"`, or `"compact"` list item.
+
+### FramerCarousel
+
+File: [HomePage.tsx](file:///d:/Project/devbook/src/routes/home/HomePage.tsx) (FramerCarousel component)
+Last updated: 2026-07-13
+
+| Property | Value / Pattern |
+| --- | --- |
+| Drag Direction | `x` (horizontal only) |
+| Friction / Stiffness | Spring configuration `{ damping: 30, stiffness: 220, mass: 0.8 }` |
+| Boundaries Elasticity | `dragElastic={0.08}` |
+| Touch Action | `pan-y` (allows vertical page swipes on touch screens) |
+
+**Pattern notes:**
+- Maps horizontal motion physics using `useSpring` and `useMotionValue`.
+- Intercepts vertical mouse wheel scroll to slide the carousel horizontally.
+- Detects start and end boundaries to release parent page scrolling.
+
+### FeaturedBooksPage Route
+
+File: [FeaturedBooksPage.tsx](file:///d:/Project/devbook/src/routes/featured/FeaturedBooksPage.tsx)
+Last updated: 2026-07-13
+
+| Property | Style / Pattern |
+| --- | --- |
+| Layout Mode | Single-column, right sidebar removed |
+| Page Size | Responsive columns * 4 (maintains exactly 4 rows per page) |
+| Subtitle Row | Inline Categories widget on horizontal layout |
+| Active Highlights | Contrast black highlights (`bg-black text-white`) |
+
+**Pattern notes:**
+- Multi-column grid layout containing catalog items.
+- Incorporates dynamic pagination controls.
+- Uses top navigation header for search inputs.
+

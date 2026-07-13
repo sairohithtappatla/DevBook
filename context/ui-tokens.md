@@ -160,6 +160,7 @@ className="bg-blue-500"
 | Links             | `text-primary` |
 | Active Navigation | `text-primary` |
 | Focus Ring        | `ring-primary` |
+| Active Horizontal Category | `bg-black text-white dark:bg-white dark:text-black` |
 
 ---
 

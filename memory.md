@@ -1,40 +1,48 @@
-# Memory — InsForge Auth SDK Integration & Unified State Machine
+# Memory — Framer Carousel & Decoupled Featured Books View
 
-Last updated: 2026-07-13 17:12 IST
+Last updated: 2026-07-13 23:57 IST
 
 ## What was built
 
-- **InsForge SDK client & Service Integration**:
-  - Configured `@insforge/sdk` client in [insforge.ts](file:///d:/Project/devbook/src/lib/insforge.ts).
-  - Created [auth.service.ts](file:///d:/Project/devbook/src/services/auth.service.ts) to interface SDK auth calls, translate network failures, and map backend error states into customer-friendly notifications.
-  - Implemented secure password reset flow without user enumeration risks.
+- **Framer Motion Horizontal Carousel**:
+  - Implemented a custom draggable and spring-animated horizontal slider component (`FramerCarousel`) inside [HomePage.tsx](file:///d:/Project/devbook/src/routes/home/HomePage.tsx) using `framer-motion`.
+  - Added spring-damping physics (`damping: 30, stiffness: 220`) and diagonal swipe drag bounds.
+  - Bound vertical mouse wheel movements to scroll the carousel track smoothly, releasing intercept control at scrolling boundaries.
+  - Guarded card clicks using a drag tracking ref to prevent accidental redirects when swiping cards.
 
-- **Unified AuthProvider & Guards**:
-  - Built [AuthProvider.tsx](file:///d:/Project/devbook/src/providers/AuthProvider.tsx) employing a single `AuthState` machine (`INITIALIZING`, `UNAUTHENTICATED`, `PENDING_VERIFICATION`, `AUTHENTICATED`, `RESETTING_PASSWORD`).
-  - Added multi-tab sync listeners via `StorageEvent` tracking to log users out instantly when another tab terminates the session.
-  - Wired page access rules into [RouteGuards.tsx](file:///d:/Project/devbook/src/components/layout/RouteGuards.tsx).
+- **Decoupled Featured Books Route**:
+  - Created [FeaturedBooksPage.tsx](file:///d:/Project/devbook/src/routes/featured/FeaturedBooksPage.tsx) to host the full 24-book project catalog browse grid and dynamic pagination rules (`columns * 4`) independently.
+  - Configured [App.tsx](file:///d:/Project/devbook/src/App.tsx) case `"featured"` to mount the new standalone route.
 
-- **Inline Verification & Animations**:
-  - Refactored email verification to display inline within the right panel of the [LoginPage.tsx](file:///d:/Project/devbook/src/routes/login/LoginPage.tsx) upon signup or unverified access, with support for clipboard 6-digit OTP autofill.
-  - Appended an `.animate-fade-in` layout entry animation class to [index.css](file:///d:/Project/devbook/src/index.css).
+- **Header Page Titles & Global Search Integration**:
+  - Expanded [TopNavigation.tsx](file:///d:/Project/devbook/src/components/layout/TopNavigation.tsx) and [AppShell.tsx](file:///d:/Project/devbook/src/components/layout/AppShell.tsx) with a `title` prop to render page names next to the drawer menu trigger.
+  - Enabled the top header search bar for both `"home"` and `"featured"` tabs, removing duplicate inline search elements from the catalog.
+
+- **Inline Horizontal Categories & Highlighting**:
+  - Refactored [CategoriesWidget.tsx](file:///d:/Project/devbook/src/components/home/CategoriesWidget.tsx) to support a `layout="horizontal"` mode that disables vertical transformations on desktop screens and hides the title label.
+  - Placed category filters inline horizontally next to the subtitle inside `FeaturedBooksPage.tsx`.
+  - Styled selected category buttons to render a contrast black background (`bg-black text-white` / `dark:bg-white dark:text-black`) when in horizontal layout.
+
+- **Clean Single-Column Layout (Featured Books)**:
+  - Configured `getRightPanelContent()` in `App.tsx` to return `null` on the `"featured"` tab, removing the right panel sidebar so the catalog grid expands to full width.
 
 ## Decisions made
 
-- **Security Isolation**: Avoided exposing user database credentials or profile checking views during the password reset request to eliminate user enumeration exploits.
-- **Single Source of Truth**: Replaced custom guest-gate exception patterns in the UI with state indicators managed by the context provider, preventing loading gate lockouts when no session cookie exists.
+- **Single Global Search Context**: Used the header search component for all search actions to keep the main view content clean.
+- **Dynamic Row Pagination**: Calculated catalog sizes at runtime (`pageSize = cols * 4`) to ensure exactly 4 rows render per page across all viewport widths.
 
 ## Problems solved
 
-- **Browser Console 401 Warns**: Prevented startup `401 Unauthorized` fetch calls from crashing the loading logic by safely catching and mapping guest profiles.
-- **Route Guard Redirect Loops**: Eliminated separate verification routes in favor of inline view rendering inside the login layout.
+- **Card Click Redirection Conflicts**: Addressed card click redirects firing during carousel swipes by deferring selection callbacks until drag animations fully complete.
+- **Page Scroll Intercept Locks**: Solved vertical mouse wheel scrolls getting trapped on the horizontal carousel by detecting bounds and releasing native vertical page scroll when hitting the start or end of the track.
 
 ## Current state
 
-- All authentication SDK calls, OTP verification interfaces, password reset workflows, cross-tab session syncing, and page transition effects are complete and build successfully.
+- Draggable carousels, horizontal header alignments, decoupled routing, and paginated lists compile and build with zero errors.
 
 ## Next session starts with
 
-- Continuing to the next major project step: **03 Database Foundation**—setting up the client tables (`books`, `phases`, `steps`, `attachments`, `progress`, and `followers`) and wiring up content queries.
+- Moving to **Phase 3 — Documentation Engine** (Markdown rendering, MDXEditor configuration, react-markdown, Shiki syntax highlighter, and Mermaid rendering).
 
 ## Open questions
 

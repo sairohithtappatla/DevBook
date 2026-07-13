@@ -12,19 +12,19 @@ Every completed milestone must be checked before starting the next one.
 
 **Current Phase**
 
-Home Page
+Documentation Engine
 
 **Last Completed**
 
-Authentication Logic, Session Persistence & Logout
+Layout Compacting, Framer Carousel, and Decoupled Featured Books Page
 
 **Currently Working**
 
-Home Page UI
+Markdown Editor & Viewer Infrastructure Setup
 
 **Next Milestone**
 
-Home Page UI
+MDXEditor Integration & Markdown Parsers
 
 ---
 
@@ -34,16 +34,16 @@ Home Page UI
 
 ### Project Structure
 
-* [ ] 01 Initialize React + Vite + TypeScript
-* [ ] 02 Configure Tailwind CSS
+* [x] 01 Initialize React + Vite + TypeScript
+* [x] 02 Configure Tailwind CSS
 * [ ] 03 Install shadcn/ui
 * [ ] 04 Configure TanStack Router
 * [ ] 05 Configure TanStack Query
-* [ ] 06 Configure InsForge Client
-* [ ] 07 Configure Project Folder Structure
-* [ ] 08 Configure Theme & Design Tokens
-* [ ] 09 Configure Global Layout
-* [ ] 10 Configure Protected Routes
+* [x] 06 Configure InsForge Client
+* [x] 07 Configure Project Folder Structure
+* [x] 08 Configure Theme & Design Tokens
+* [x] 09 Configure Global Layout
+* [x] 10 Configure Protected Routes
 
 ---
 
@@ -51,11 +51,11 @@ Home Page UI
 
 ### Shared UI Components
 
-* [ ] 11 Sidebar
-* [ ] 12 Top Navigation
-* [ ] 13 Search Bar
-* [ ] 14 Buttons
-* [ ] 15 Cards
+* [x] 11 Sidebar
+* [x] 12 Top Navigation
+* [x] 13 Search Bar
+* [x] 14 Buttons
+* [x] 15 Cards
 * [ ] 16 Dropdowns
 * [ ] 17 Dialogs
 * [ ] 18 Empty States
@@ -97,9 +97,9 @@ Home Page UI
 
 ### Home
 
-* [ ] 36 Home UI
-* [ ] 37 Search
-* [ ] 38 Book Cards
+* [x] 36 Home UI
+* [x] 37 Search
+* [x] 38 Book Cards
 * [ ] 39 Book Details
 * [ ] 40 Get Started
 
