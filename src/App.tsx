@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { AuthProvider } from "@/providers/AuthProvider";
+import { ToastProvider } from "@/providers/ToastProvider";
 import { SearchProvider } from "@/providers/SearchProvider";
 import { useAuth } from "@/hooks/useAuth";
 import { PublicRoute, ProtectedRoute } from "@/components/layout/RouteGuards";
@@ -8,13 +9,18 @@ import { AppShell } from "@/components/layout/AppShell";
 import { HomePage, HomeRightPanel } from "@/routes/home/HomePage";
 import { FeaturedBooksPage } from "@/routes/featured/FeaturedBooksPage";
 import { MyBooksPage } from "@/routes/books/MyBooksPage";
-import { PageContainer } from "@/components/layout/PageContainer";
-import { Loader2, Plus, Sparkles } from "lucide-react";
+import { BookEditorPage } from "@/routes/books/BookEditorPage";
+import { BookReaderPage } from "@/routes/books/BookReaderPage";
+import { ProgressPage } from "@/routes/progress/ProgressPage";
+import { ProfilePage } from "@/routes/profile/ProfilePage";
+import { Loader2 } from "lucide-react";
 
 function AppContent() {
   const { isInitializing, isAuthenticated } = useAuth();
   const [currentTab, setCurrentTab] = useState("home");
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [editingBookId, setEditingBookId] = useState<string | null>(null);
+  const [readingBookId, setReadingBookId] = useState<string | null>(null);
 
   // 1. Loading Gate
   if (isInitializing) {
@@ -45,6 +51,7 @@ function AppContent() {
             onSelectCategory={setSelectedCategory}
             onExploreBooks={() => setCurrentTab("featured")}
             onCreateBook={() => setCurrentTab("books")}
+            onBookSelect={(book) => setReadingBookId(book.id)}
           />
         );
       case "featured":
@@ -55,25 +62,11 @@ function AppContent() {
           />
         );
       case "books":
-        return <MyBooksPage />;
+        return <MyBooksPage onEditBook={setEditingBookId} onViewBook={setReadingBookId} />;
       case "progress":
-        return (
-          <PageContainer>
-            <h1 className="font-heading text-2xl md:text-3xl font-semibold">My Progress</h1>
-            <div className="flex flex-col items-center justify-center p-12 bg-surface border border-dashed border-border rounded-xl text-center min-h-[300px]">
-              <p className="font-body text-text-secondary text-sm">Tracked learning books and phase completions will display here.</p>
-            </div>
-          </PageContainer>
-        );
+        return <ProgressPage onBookSelect={setReadingBookId} />;
       case "profile":
-        return (
-          <PageContainer>
-            <h1 className="font-heading text-2xl md:text-3xl font-semibold">My Profile</h1>
-            <div className="flex flex-col items-center justify-center p-12 bg-surface border border-dashed border-border rounded-xl text-center min-h-[300px]">
-              <p className="font-body text-text-secondary text-sm">Your public profile, bio, followers, and published books will display here.</p>
-            </div>
-          </PageContainer>
-        );
+        return <ProfilePage />;
       default:
         return null;
     }
@@ -93,6 +86,22 @@ function AppContent() {
   };
 
   // 3. Authenticated View (with ProtectedRoute guard wrapper)
+  if (editingBookId) {
+    return (
+      <ProtectedRoute>
+        <BookEditorPage bookId={editingBookId} onBack={() => setEditingBookId(null)} />
+      </ProtectedRoute>
+    );
+  }
+
+  if (readingBookId) {
+    return (
+      <ProtectedRoute>
+        <BookReaderPage bookId={readingBookId} onBack={() => setReadingBookId(null)} />
+      </ProtectedRoute>
+    );
+  }
+
   return (
     <ProtectedRoute>
       <SearchProvider>
@@ -100,8 +109,19 @@ function AppContent() {
           currentTab={currentTab}
           onChangeTab={setCurrentTab}
           rightPanelContent={getRightPanelContent()}
-          showSearch={currentTab === "home" || currentTab === "featured" || currentTab === "books"}
-          title={currentTab === "featured" ? "Featured Books" : currentTab === "books" ? "My Books" : undefined}
+          showSearch={currentTab === "home" || currentTab === "featured" || currentTab === "progress" || currentTab === "profile"}
+          showTopNavigation={currentTab !== "books" && currentTab !== "progress" && currentTab !== "profile"}
+          title={
+            currentTab === "featured"
+              ? "Featured Books"
+              : currentTab === "books"
+              ? "My Books"
+              : currentTab === "progress"
+              ? "My Progress"
+              : currentTab === "profile"
+              ? "My Profile"
+              : undefined
+          }
         >
           {renderTabContent()}
         </AppShell>
@@ -113,7 +133,9 @@ function AppContent() {
 export function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <ToastProvider>
+        <AppContent />
+      </ToastProvider>
     </AuthProvider>
   );
 }

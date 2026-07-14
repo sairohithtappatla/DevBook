@@ -37,7 +37,7 @@ export function TopCreatorsWidget({ creators = defaultCreators, className = "" }
       <h3 className="font-heading text-base font-semibold text-text-primary select-none px-2">
         Top Creators
       </h3>
-      <div className="space-y-4 px-2">
+      <div className="space-y-3 px-1">
         {creators.map((creator) => (
           <div key={creator.id} className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">

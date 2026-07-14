@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState } from "react";
+import { BookDetailsModal } from "@/components/modals/BookDetailsModal";
 import { motion, useMotionValue, useSpring } from "framer-motion";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Section } from "@/components/ui/Section";
@@ -10,66 +11,44 @@ import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { CategoriesWidget } from "@/components/home/CategoriesWidget";
 import { TopCreatorsWidget } from "@/components/home/TopCreatorsWidget";
 import { CreateBookCTA } from "@/components/home/CreateBookCTA";
+import { useBooks } from "@/hooks/useBooks";
 
-// Mock data matching home page
-const mockBooks: BookData[] = [
-  {
-    id: "1",
-    title: "Workflow Engine",
-    description: "Build a production ready workflow engine from scratch.",
-    steps_count: 24,
-    author: { name: "Rohith" },
-  },
-  {
-    id: "2",
-    title: "Authentication System",
-    description: "Implement JWT auth, roles, permissions & more.",
-    steps_count: 18,
-    author: { name: "Ananya" },
-  },
-  {
-    id: "3",
-    title: "E-commerce Backend",
-    description: "A complete backend for an e-commerce platform.",
-    steps_count: 31,
-    author: { name: "Sai Kiran" },
-  },
-  {
-    id: "4",
-    title: "AWS Infrastructure",
-    description: "Learn to design, deploy and manage scalable infra.",
-    steps_count: 22,
-    author: { name: "Vamsi" },
-  },
-  {
-    id: "5",
-    title: "Python API Mastery",
-    description: "Build fast and powerful APIs with FastAPI.",
-    steps_count: 16,
-    author: { name: "Meera" },
-  },
-  {
-    id: "6",
-    title: "Database Design",
-    description: "Master relational design principles and SQL.",
-    steps_count: 20,
-    author: { name: "Rahul" },
-  },
-  {
-    id: "7",
-    title: "System Design Basics",
-    description: "Understand the fundamentals of scalable system design.",
-    steps_count: 28,
-    author: { name: "Arjun" },
-  },
-  {
-    id: "8",
-    title: "Docker Deep Dive",
-    description: "Containerize applications like a pro.",
-    steps_count: 14,
-    author: { name: "Neha" },
-  },
-];
+import type { BookData as ModalBookData } from "@/components/modals/BookDetailsModal";
+
+function mapDBBookToBookData(dbBook: any): BookData {
+  return {
+    id: dbBook.id,
+    title: dbBook.title,
+    description: dbBook.description || "",
+    cover_url: dbBook.cover_url || "workflow",
+    steps_count: 12,
+    author: {
+      name: "DevBook Creator",
+      avatar_url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80"
+    }
+  };
+}
+
+function mapDBBookToModalBookData(dbBook: any): ModalBookData {
+  return {
+    id: dbBook.id,
+    title: dbBook.title,
+    description: dbBook.description || "",
+    coverType: dbBook.cover_url || "workflow",
+    difficulty: dbBook.difficulty === "BEGINNER" ? "Beginner" : dbBook.difficulty === "INTERMEDIATE" ? "Intermediate" : "Advanced",
+    estimatedTime: `${dbBook.estimated_read_time || 60} mins`,
+    stepsCount: 12,
+    rating: 4.8,
+    reviewsCount: 24,
+    tags: dbBook.tags || [],
+    category: dbBook.tags?.[0] || "Backend",
+    author: {
+      name: "DevBook Creator",
+      avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80",
+      role: "Creator"
+    }
+  };
+}
 
 type HomePageProps = {
   selectedCategory: string;
@@ -178,31 +157,25 @@ export function HomePage({
   onBookSelect,
   onCreateBook,
 }: HomePageProps) {
+  const { data: dbBooks = [] } = useBooks();
+
+  const [selectedBookForDetails, setSelectedBookForDetails] = useState<ModalBookData | null>(null);
   const { searchQuery } = useSearch();
   const isLargeDesktop = useMediaQuery("(min-width: 1280px)");
 
   // Filter books by query and category
-  const filteredBooks = mockBooks.filter((book) => {
+  const filteredDBBooks = dbBooks.filter((book) => {
     const matchesSearch =
       book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      book.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (book.author?.name || "").toLowerCase().includes(searchQuery.toLowerCase());
+      (book.description || "").toLowerCase().includes(searchQuery.toLowerCase());
 
     if (!matchesSearch) return false;
     if (selectedCategory === "All") return true;
 
-    // Mapping category mock categories to specific books for simulation
-    const categoryMapping: Record<string, string[]> = {
-      Backend: ["Workflow Engine", "Authentication System", "E-commerce Backend", "Python API Mastery"],
-      DevOps: ["AWS Infrastructure", "Docker Deep Dive"],
-      "System Design": ["System Design Basics"],
-      Databases: ["Database Design"],
-      "API Design": ["Python API Mastery"],
-      Architecture: ["Workflow Engine", "System Design Basics"],
-    };
-
-    return categoryMapping[selectedCategory]?.includes(book.title) ?? false;
+    return (book.tags || []).some(tag => tag.toLowerCase() === selectedCategory.toLowerCase());
   });
+
+  const filteredBooks = filteredDBBooks.map(mapDBBookToBookData);
 
   // Render sidebar widgets inline if on small screens
   const renderInlineWidgets = () => {
@@ -226,7 +199,7 @@ export function HomePage({
   return (
     <PageContainer className="flex flex-col justify-start space-y-10 pb-6">
       {/* Hero section */}
-      <HeroSection onExploreClick={onExploreBooks} />
+      <HeroSection onExploreClick={onExploreBooks} className="-mt-2 md:-mt-8" />
 
       {/* Main content grid */}
       <Section
@@ -242,11 +215,31 @@ export function HomePage({
         }
         className="w-full"
       >
-        <FramerCarousel books={filteredBooks} onBookSelect={onBookSelect} />
+        <FramerCarousel
+          books={filteredBooks}
+          onBookSelect={(book) => {
+            const dbBook = dbBooks.find(b => b.id === book.id);
+            if (dbBook) {
+              setSelectedBookForDetails(mapDBBookToModalBookData(dbBook));
+            }
+          }}
+        />
       </Section>
 
       {/* Responsive Inline Widgets for Tablet/Mobile */}
       {renderInlineWidgets()}
+
+      <BookDetailsModal
+        isOpen={selectedBookForDetails !== null}
+        onClose={() => setSelectedBookForDetails(null)}
+        book={selectedBookForDetails}
+        onStartReading={() => {
+          if (selectedBookForDetails) {
+            onBookSelect?.(selectedBookForDetails);
+            setSelectedBookForDetails(null);
+          }
+        }}
+      />
     </PageContainer>
   );
 }
@@ -266,13 +259,13 @@ export function HomeRightPanel({
   return (
     <div className="flex flex-col h-full">
       <div className="space-y-2">
-        <div className="bg-surface border border-border rounded-2xl p-2.5">
+        <div className="bg-surface border border-border rounded-2xl p-2">
           <CategoriesWidget
             selectedCategory={selectedCategory}
             onSelectCategory={onSelectCategory}
           />
         </div>
-        <div className="bg-surface border border-border rounded-2xl p-2.5">
+        <div className="bg-surface border border-border rounded-2xl p-2">
           <TopCreatorsWidget />
         </div>
       </div>

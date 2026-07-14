@@ -12,6 +12,7 @@ type AppShellProps = {
   children: React.ReactNode;
   rightPanelContent?: React.ReactNode;
   showSearch?: boolean;
+  showTopNavigation?: boolean;
   title?: string;
 };
 
@@ -22,6 +23,7 @@ export function AppShell({
   children,
   rightPanelContent,
   showSearch = true,
+  showTopNavigation = true,
   title,
 }: AppShellProps) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -59,26 +61,29 @@ export function AppShell({
       </Drawer>
 
       {/* Main Content Pane to the right of the sidebar */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
-        {/* Top Fixed Navigation */}
-        <TopNavigation
-          onMenuClick={() => setIsDrawerOpen(true)}
-          showSearch={showSearch}
-          title={title}
-        />
+      <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+        {showTopNavigation && (
+          <div className="absolute top-0 left-0 right-0 z-20 pointer-events-none">
+            <TopNavigation
+              onMenuClick={() => setIsDrawerOpen(true)}
+              showSearch={showSearch}
+              title={title}
+            />
+          </div>
+        )}
 
         {/* Content columns (Center Feed + Right Panel) */}
         <div className="flex-1 flex overflow-hidden w-full relative">
           {/* Center Feed (Main content area) */}
           <div className="flex-1 flex flex-col h-full overflow-hidden relative">
-            <ScrollArea className="bg-surface-secondary">
+            <ScrollArea className={`bg-surface-secondary ${showTopNavigation ? "pt-16" : ""}`}>
               {children}
             </ScrollArea>
           </div>
 
           {/* Right Panel (>= 1280px) */}
           {rightPanelContent && (
-            <RightPanel className="hidden xl:block">
+            <RightPanel className={`hidden xl:block ${showTopNavigation ? "pt-16" : ""}`}>
               {rightPanelContent}
             </RightPanel>
           )}

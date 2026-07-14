@@ -26,18 +26,18 @@ export function Sidebar({ currentTab, onChangeTab, className = "" }: SidebarProp
 
   return (
     <aside
-      className={`w-[268px] bg-white border-r border-border flex flex-col h-full px-5 pt-6 pb-6 shrink-0 ${className}`}
+      className={`w-45 rounded-md bg-white border-r border-border flex flex-col h-full px-3 pt-5 pb-5 shrink-0 font-sidebar ${className}`}
     >
-      {/* Brand Logo & Name */}
-      <div className="flex items-center gap-2.5 px-1.5 mb-5">
+      {/* Brand Logo & Name — logo untouched, text size reduced to match target */}
+      <div className="flex items-center gap-1.5 px-1.5 mb-6">
         <img src="/logo.svg" alt="DevBook" className="h-10 w-10" />
-        <p className="text-xl font-semibold leading-none text-text-primary font-heading">
+        <p className="text-base font-semibold leading-none text-text-primary font-sidebar">
           Dev<span className="text-[#818CF8]">Book</span>
         </p>
       </div>
 
       {/* Navigation Links */}
-      <nav className="space-y-1.5 mt-3">
+      <nav className="space-y-1">
         {navigation.map((item) => {
           const Icon = item.icon;
           const isActive = currentTab === item.tabId;
@@ -45,29 +45,29 @@ export function Sidebar({ currentTab, onChangeTab, className = "" }: SidebarProp
             <button
               key={item.tabId}
               onClick={() => onChangeTab(item.tabId)}
-              className={`w-full flex items-center gap-2.5 h-9 px-2 rounded-lg font-sans font-medium text-sm transition-all duration-150 cursor-pointer ${isActive
-                  ? "bg-surface-secondary text-text-primary font-semibold"
-                  : "text-text-secondary hover:bg-surface-secondary/50 hover:text-text-primary"
+              className={`w-full flex items-center gap-2.5 h-10 px-0  font-sidebar text-[13px] leading-none transition-all duration-150 cursor-pointer ${isActive
+                ? "bg-surface-secondary text-text-primary font-semibold"
+                : "text-text-secondary font-medium hover:bg-surface-secondary hover:text-text-primary"
                 }`}
             >
               <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-text-primary" : "text-text-secondary"}`} />
-              <span className="truncate">{item.name}</span>
+              <span className="truncate font-sidebar text-[13px] font-bold text-current">{item.name}</span>
             </button>
           );
         })}
-
-        {/* Separator Line */}
-        <div className="border-t border-border/80 my-3 mx-1" />
-
-        {/* Logout button */}
-        <button
-          onClick={() => signOut()}
-          className="w-full flex items-center gap-2.5 h-9 px-2 rounded-lg font-body font-medium text-sm text-text-secondary hover:bg-danger-light/10 hover:text-danger transition-all duration-150 cursor-pointer"
-        >
-          <LogOut className="w-4 h-4 text-text-secondary shrink-0" />
-          <span className="truncate">Logout</span>
-        </button>
       </nav>
+
+      {/* Separator */}
+      <div className="border-t border-border/70 my-3 mx-1" />
+
+      {/* Logout button */}
+      <button
+        onClick={() => signOut()}
+        className="w-full flex items-center gap-2.5 h-9 px-2 rounded-lg font-sidebar text-xs leading-none font-medium text-text-secondary hover:bg-danger-light/10 hover:text-danger transition-all duration-150 cursor-pointer"
+      >
+        <LogOut className="w-4 h-4 text-text-secondary shrink-0" />
+        <span className="truncate">Logout</span>
+      </button>
     </aside>
   );
 }

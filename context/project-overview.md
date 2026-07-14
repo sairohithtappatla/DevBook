@@ -26,6 +26,7 @@ DevBook solves this by converting AI-generated Markdown into structured develope
 /                       → Home
 /login                  → Authentication
 /books                  → My Books
+/featured               ->Featured Books Page (Explore books by category)
 /books/new              → Create Book
 /books/:slug/edit       → Documentation Editor
 /books/:slug            → Documentation Reader

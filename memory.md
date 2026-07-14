@@ -1,48 +1,41 @@
-# Memory — Framer Carousel & Decoupled Featured Books View
+# Memory — Progress and Profile Dashboard Pages Implementation
 
-Last updated: 2026-07-13 23:57 IST
+Last updated: 2026-07-14 15:30 IST
 
 ## What was built
 
-- **Framer Motion Horizontal Carousel**:
-  - Implemented a custom draggable and spring-animated horizontal slider component (`FramerCarousel`) inside [HomePage.tsx](file:///d:/Project/devbook/src/routes/home/HomePage.tsx) using `framer-motion`.
-  - Added spring-damping physics (`damping: 30, stiffness: 220`) and diagonal swipe drag bounds.
-  - Bound vertical mouse wheel movements to scroll the carousel track smoothly, releasing intercept control at scrolling boundaries.
-  - Guarded card clicks using a drag tracking ref to prevent accidental redirects when swiping cards.
+- **My Progress Page & Right Panel Widgets**:
+  - Created [ProgressPage.tsx](file:///d:/Project/devbook/src/routes/progress/ProgressPage.tsx) with 4 stats cards (In Progress, Completed, Total Learning Time, Current Streak) and a list of progress items featuring custom SVG book covers, percentage progress bars, completed steps count, and custom pagination.
+  - Created [ProgressRightPanel.tsx](file:///d:/Project/devbook/src/routes/progress/ProgressRightPanel.tsx) containing a Learning Calendar grid for May 2025 (with daily study highlights), an SVG Donut progress overview chart, and a Recent Achievements list.
 
-- **Decoupled Featured Books Route**:
-  - Created [FeaturedBooksPage.tsx](file:///d:/Project/devbook/src/routes/featured/FeaturedBooksPage.tsx) to host the full 24-book project catalog browse grid and dynamic pagination rules (`columns * 4`) independently.
-  - Configured [App.tsx](file:///d:/Project/devbook/src/App.tsx) case `"featured"` to mount the new standalone route.
+- **My Profile Page & Right Panel Widgets**:
+  - Created [ProfilePage.tsx](file:///d:/Project/devbook/src/routes/profile/ProfilePage.tsx) with an abstract decorative cover banner, profile photo overlay, name/bio details, geolocation/website/stats metadata metadata, and a published books grid.
+  - Created [ProfileRightPanel.tsx](file:///d:/Project/devbook/src/routes/profile/ProfileRightPanel.tsx) containing a Profile Completion checklist (with progress values), a Top Skills tag grid, and social/contact Links items.
 
-- **Header Page Titles & Global Search Integration**:
-  - Expanded [TopNavigation.tsx](file:///d:/Project/devbook/src/components/layout/TopNavigation.tsx) and [AppShell.tsx](file:///d:/Project/devbook/src/components/layout/AppShell.tsx) with a `title` prop to render page names next to the drawer menu trigger.
-  - Enabled the top header search bar for both `"home"` and `"featured"` tabs, removing duplicate inline search elements from the catalog.
-
-- **Inline Horizontal Categories & Highlighting**:
-  - Refactored [CategoriesWidget.tsx](file:///d:/Project/devbook/src/components/home/CategoriesWidget.tsx) to support a `layout="horizontal"` mode that disables vertical transformations on desktop screens and hides the title label.
-  - Placed category filters inline horizontally next to the subtitle inside `FeaturedBooksPage.tsx`.
-  - Styled selected category buttons to render a contrast black background (`bg-black text-white` / `dark:bg-white dark:text-black`) when in horizontal layout.
-
-- **Clean Single-Column Layout (Featured Books)**:
-  - Configured `getRightPanelContent()` in `App.tsx` to return `null` on the `"featured"` tab, removing the right panel sidebar so the catalog grid expands to full width.
+- **App Layout & Router Integration**:
+  - Configured [App.tsx](file:///d:/Project/devbook/src/App.tsx) tab routing to mount the `ProgressPage` and `ProfilePage` center views and render the corresponding `ProgressRightPanel` and `ProfileRightPanel` sidebars.
+  - Set page titles ("My Progress", "My Profile") and enabled search bar display on `AppShell` header configurations.
+  - Enlarged the default width of the [RightPanel](file:///d:/Project/devbook/src/components/layout/RightPanel.tsx) wrapper aside container to `w-[320px]`.
 
 ## Decisions made
 
-- **Single Global Search Context**: Used the header search component for all search actions to keep the main view content clean.
-- **Dynamic Row Pagination**: Calculated catalog sizes at runtime (`pageSize = cols * 4`) to ensure exactly 4 rows render per page across all viewport widths.
+- **Header Consistency**: Standardized header titles and search options inside the AppShell top navigation rather than duplicating header titles inside components.
+- **Embedded Custom Brand SVGs**: Created local embedded React components for GitHub, LinkedIn, and Twitter icons inside the profile page as the lucide-react version installed does not export these brand members.
+- **Strict Viewport Heights**: Optimized side widgets to use proportional flex height growing (`flex-1`) and eliminated nested double paddings to prevent overflow scrollbars in standard laptop viewports.
 
 ## Problems solved
 
-- **Card Click Redirection Conflicts**: Addressed card click redirects firing during carousel swipes by deferring selection callbacks until drag animations fully complete.
-- **Page Scroll Intercept Locks**: Solved vertical mouse wheel scrolls getting trapped on the horizontal carousel by detecting bounds and releasing native vertical page scroll when hitting the start or end of the track.
+- **Card/Sidebar Scroll Overflow**: Restored default card paddings and scaled side panels so the cards fill the vertical space proportionally without creating scrollbars.
+- **Missing Lucide member exports**: Resolved compile issues for missing Github/Linkedin/Twitter icons by implementing custom SVGs.
+- **Unused Variable Flags**: Removed unused imports and variable warnings to ensure the application builds with zero warnings.
 
 ## Current state
 
-- Draggable carousels, horizontal header alignments, decoupled routing, and paginated lists compile and build with zero errors.
+- Landing Page, Auth flows, Home page feed, Featured roadmaps grid, My Books CMS list, My Progress dashboard, and My Profile configurations compile and run successfully without any errors or compiler warnings.
 
 ## Next session starts with
 
-- Moving to **Phase 3 — Documentation Engine** (Markdown rendering, MDXEditor configuration, react-markdown, Shiki syntax highlighter, and Mermaid rendering).
+- Moving to **Phase 3 — Documentation Engine** (MDXEditor integration, remark/unified parser pipelines, react-markdown rendering, Shiki syntax highlighting, and Mermaid chart support).
 
 ## Open questions
 

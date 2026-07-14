@@ -34,9 +34,9 @@ export function TopNavigation({ onMenuClick, showSearch = true, title }: TopNavi
   }, [theme]);
 
   return (
-    <header className="h-16 bg-background flex items-center justify-between px-8 shrink-0 z-10 w-full">
+    <header className="h-16 bg-transparent flex items-center justify-between px-8 shrink-0 z-10 w-full pointer-events-none">
       {/* Left side: Hamburger & Title */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 pointer-events-auto">
         <button
           onClick={onMenuClick}
           className="lg:hidden p-2 rounded-md hover:bg-surface-secondary text-text-secondary cursor-pointer shrink-0"
@@ -51,7 +51,7 @@ export function TopNavigation({ onMenuClick, showSearch = true, title }: TopNavi
       </div>
 
       {/* Right side: Search bar & Theme Toggle */}
-      <div className="flex items-center gap-10 flex-1 justify-end">
+      <div className="flex items-center gap-10 flex-1 justify-end pointer-events-auto">
         {showSearch && (
           <div className="relative w-full max-w-[480px]">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />

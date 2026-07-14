@@ -784,3 +784,191 @@ Last updated: 2026-07-13
 - Incorporates dynamic pagination controls.
 - Uses top navigation header for search inputs.
 
+### ProgressPage
+
+File: [ProgressPage.tsx](file:///d:/Project/devbook/src/routes/progress/ProgressPage.tsx)
+Last updated: 2026-07-14
+
+| Property         | Class                                                                 |
+| ---------------- | --------------------------------------------------------------------- |
+| Background       | `bg-surface-secondary` (wrapper), `bg-surface` (cards)                 |
+| Border           | `border border-border`                                                |
+| Border radius    | `rounded-xl`                                                          |
+| Text — primary   | `text-text-primary`                                                   |
+| Text — secondary | `text-text-secondary`                                                 |
+| Spacing          | `p-4` (card padding), `gap-4` (grid/layout gaps)                      |
+| Hover state      | `hover:shadow-xs`                                                     |
+| Shadow           | `shadow-xs`, `shadow-sm`                                              |
+| Accent usage     | `bg-[#111827] text-white` (primary CTA buttons), `bg-[#16A34A]` (progress bar) |
+
+**Pattern notes:**
+- Integrates progress tracking lists with responsive container heights.
+- Handles client pagination and grid-to-list layout patterns.
+
+### ProgressRightPanel
+
+File: [ProgressRightPanel.tsx](file:///d:/Project/devbook/src/routes/progress/ProgressRightPanel.tsx)
+Last updated: 2026-07-14
+
+| Property         | Class                                                                 |
+| ---------------- | --------------------------------------------------------------------- |
+| Background       | `bg-surface` (cards)                                                  |
+| Border           | `border border-border`, `border-border/40`                            |
+| Border radius    | `rounded-xl`                                                          |
+| Text — primary   | `text-text-primary`                                                   |
+| Text — secondary | `text-text-secondary`, `text-text-muted`                              |
+| Spacing          | `p-4` (card padding), `gap-4` (panel container gap)                   |
+| Hover state      | `hover:bg-surface-secondary`                                          |
+| Shadow           | `shadow-xs`                                                           |
+
+**Pattern notes:**
+- Displays dashboard widgets (Calendar, Donut Graph, Recent Achievements list) using proportional `flex-1` heights.
+- Locks bounds to the single viewport without inducing overflow scroll.
+
+### BookEditorPage
+
+File: [BookEditorPage.tsx](file:///d:/Project/devbook/src/routes/books/BookEditorPage.tsx)
+Last updated: 2026-07-14
+
+| Property         | Class / Style |
+| ---------------- | ------------- |
+| Background       | `bg-surface` (workspace), `bg-sidebar` (left/right columns), `bg-surface-secondary` (toolbars, footer) |
+| Border           | `border-r border-border`, `border-l border-border`, `border-b border-border` |
+| Text — primary   | `text-text-primary` (active headers/text) |
+| Text — secondary | `text-text-secondary` (descriptions/subtitles) |
+| Layout           | Three columns: Navigation tree (280px), Workspace (flex-1), Inspector (300px) |
+| Motion           | Transition-all hover states, fade-in transition on code preview renders |
+
+**Pattern notes:**
+- Workspace coordinates a split view (Edit + Live Preview), Edit-only view, and Full preview view.
+- Auto-saving state debounces changes in 1.5 seconds.
+- Keyboard shortcut `Ctrl+K` toggles CMD navigation popup modal.
+
+### BookReaderPage
+
+File: [BookReaderPage.tsx](file:///d:/Project/devbook/src/routes/books/BookReaderPage.tsx)
+Last updated: 2026-07-14
+
+| Property         | Class / Style |
+| ---------------- | ------------- |
+| Background       | `bg-surface` (workspace), `bg-sidebar` (left/right columns), `bg-surface-secondary` (inline widgets) |
+| Border           | `border-r border-border`, `border-l border-border`, `border-b border-border` |
+| Text — primary   | `text-text-primary` (active headers/text) |
+| Text — secondary | `text-text-secondary` (descriptions/subtitles) |
+| Layout           | Three columns: Navigation tree (280px), Workspace (flex-1), Widget Inspector (300px) |
+| Motion           | Transition-all hover states on card button pagination |
+
+**Pattern notes:**
+- Edge-to-edge fullscreen documentation reader with progress calculations.
+- Central search matches step lists with jump redirects.
+- Keyboard shortcut `Ctrl+K` toggles CMD search step overlay modal.
+
+### Global Typography Tokens
+
+File: [index.css](file:///d:/Project/devbook/src/index.css)
+Last updated: 2026-07-14
+
+| Property         | Class / Token |
+| ---------------- | ------------- |
+| Body font        | `--font-body: "Work Sans", sans-serif` |
+| Sans utility     | `--font-sans: "Work Sans", sans-serif` |
+| Heading font     | `--font-heading: "JetBrains Mono", monospace` |
+| Code font        | `--font-code: "JetBrains Mono", monospace` |
+| Applied root     | `html`, `body` use `var(--font-body)` |
+
+**Pattern notes:**
+- Sidebar navigation and other `font-sans` body UI should resolve to Work Sans.
+- Page titles, documentation titles, and section headings should continue using `font-heading`.
+- Code-oriented surfaces should continue using `font-code`.
+
+### Sidebar Compact Typography
+
+File: [Sidebar.tsx](file:///d:/Project/devbook/src/components/layout/Sidebar.tsx)
+Last updated: 2026-07-14
+
+| Property         | Class / Token |
+| ---------------- | ------------- |
+| Sidebar font     | `font-sidebar`, `--font-sidebar: "Roboto", sans-serif` |
+| Brand text       | `text-base font-semibold leading-none text-text-primary` |
+| Navigation text  | `text-[13px] leading-none font-medium`, active `font-semibold` |
+| Label color      | `text-current` inherited from button state |
+| Spacing          | Existing sidebar spacing retained; typography-only changes allowed |
+| Background       | `bg-white`, active `bg-surface-secondary` |
+| Text colors      | `text-text-primary`, `text-text-secondary` |
+| Hover state      | `hover:bg-surface-secondary hover:text-text-primary` |
+
+**Pattern notes:**
+- Sidebar keeps the existing width and nav item geometry; only font family, font size, and text color should be changed for typography fit work.
+- Hit areas remain at `h-10` for nav buttons and `h-9` for logout.
+
+### MyBooks Middle Section
+
+File: [MyBooksPage.tsx](file:///d:/Project/devbook/src/routes/books/MyBooksPage.tsx)
+Last updated: 2026-07-14
+
+| Property         | Class / Token |
+| ---------------- | ------------- |
+| Content shell    | `.page-content-container.my-books-page`, `padding: 40px`, `font-family: var(--font-workspace)` |
+| Header layout    | `.my-books-header-row`, `gap: 24px`, `margin-bottom: 32px` |
+| Title            | `.page-title`, `24px / 1.2`, `font-weight: 600`, `text-primary` |
+| Description      | `.page-subtext`, `13px / 20px`, `text-secondary`, `margin-top: 6px` |
+| Primary action   | `.btn-create-book`, `40px` height, `13px`, `font-weight: 600`, `bg-text-primary` |
+| Tabs             | `.tabs-filters-row`, `.tab-btn`, active `2px` text-primary underline |
+| Filters          | `.filter-dropdown`, `32px` height, `12px`, token border and surface background |
+| Table            | `.data-table-container`, `8px` radius, token border, surface background |
+| Table header     | `.data-table th`, `11px`, uppercase, token muted text, `12px 20px` padding |
+| Table rows       | `.data-table td`, `16px 20px` padding, `border-light` dividers |
+| Table title      | `.table-book-title`, `13px / 18px`, `font-weight: 600` |
+| Table metadata   | `.table-book-desc` `12px / 20px`; `.table-book-phases` and date subtext `11px / 16px` |
+| Badges/status    | `.badge` and `.status-line`, `12px / 16px`, token status colors |
+
+**Pattern notes:**
+- My Books is rendered as the exact middle workspace content with no top navigation bar on this tab.
+- The content follows the provided reference class structure: header row, tabs/filter row, data table, actions, and pagination.
+- Typography uses scoped CSS classes rather than utility composition so Roboto, text sizes, row padding, and tab/table spacing remain exact for the middle section.
+- Colors use DevBook tokens instead of raw hex/default Tailwind palettes.
+
+### CreateBookCTA
+
+File: [CreateBookCTA.tsx](file:///d:/Project/devbook/src/components/home/CreateBookCTA.tsx)
+Last updated: 2026-07-14
+
+| Property         | Class |
+| ---------------- | ----- |
+| Background       | `bg-white` |
+| Border           | None |
+| Border radius    | `rounded-xl` (container), `rounded-md` (button) |
+| Text — primary   | `text-text-primary` |
+| Text — secondary | `text-text-secondary` |
+| Spacing          | `p-3`, `mt-3`, `space-y-5` (wrapper layout), `space-y-3` (text stack) |
+| Hover state      | `hover:bg-black/90` (button) |
+| Shadow           | None |
+| Accent usage     | `bg-text-primary` (button background), `text-white` (button text) |
+
+**Pattern notes:**
+- Rendered inside the home page dashboard/widgets area.
+- Highlights a clear call to action to create a book with an prominent icon (`Sparkles` at `w-8 h-8`).
+- Uses standard typography (`font-heading` for title, `font-sans` for description).
+- Clean spacing with `mt-3` and card padding `p-3` for desktop fit.
+
+### ProfilePage
+
+File: [ProfilePage.tsx](file:///d:/Project/devbook/src/routes/profile/ProfilePage.tsx)
+Last updated: 2026-07-14
+
+| Property         | Class |
+| ---------------- | ----- |
+| Background       | `bg-surface` (card panels), `page-content-container my-books-page` (wrapper) |
+| Border           | `border border-border`, `border-t border-border/40` |
+| Border radius    | `rounded-xl` (main container), `rounded-lg` (buttons), `rounded-full` (avatar) |
+| Text — primary   | `text-text-primary`, `font-heading text-lg font-bold` |
+| Text — secondary | `text-text-secondary`, `text-xs` |
+| Spacing          | `space-y-3` (outer elements), `px-4 pb-4 pt-2` (banner container), `gap-4` (avatar layouts) |
+| Hover state      | `hover:bg-surface-secondary` (buttons), `hover:text-text-primary` (links) |
+| Shadow           | `shadow-xs`, `shadow-sm` |
+| Accent usage     | `bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600` (cover background) |
+
+**Pattern notes:**
+- Merges profile banner card, bio, social links and pagination inside a unified, border-to-border layout shell.
+- Lifts the main card component using negative margins (`-mt-6 md:-mt-8`) to overlap transparent navigation zones correctly.
+- Features standard table-tab pagination footers and matches tabs navigation styling (`tabs-filters-row`, `tab-btn`) with the My Books page.
