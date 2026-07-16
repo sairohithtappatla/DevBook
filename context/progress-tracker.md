@@ -203,6 +203,14 @@ Example
 * Reordered My Books table columns to: Book, Category, Visibility, Updated, Status, Actions.
 * Redesigned the Book Editor workspace to use resizable panels, Zen Mode (Ctrl+Shift+E), Notion-style step title input, invisible toolbar, shrunk status bar, and grayscale typography-only panels.
 * Restyled the Book Reader page layout, typography, and sidebar interactions to match the Next.js docs style precisely (1400px container, 284px left sidebar, 240px right sidebar, 640px center prose max-width, 15px body text size, 3rem h1 header, and Geist variable fonts). Added matching prose styles to the editor preview pane.
+* Implemented scroll synchronization between the Markdown editor scroll container and the preview pane, utilizing programmatic flag locks (`isSyncingEditor` and `isSyncingPreview`) to prevent recursive feedback loops, ensuring synchronization works seamlessly during text entry and typing.
+* Integrated drag-and-drop file drop listeners on the editor container and updated the inline editor image upload system to send assets directly to the `attachments` InsForge Storage bucket, automatically injecting formatted Markdown links at the cursor position.
+* Added dark mode style overrides in `index.css` to fix the MDXEditor select dropdowns/triggers so that the code block language selector displays with a dark background (#1f1f23) and high contrast text in dark mode.
+* Reordered MDXEditor plugins to load `markdownShortcutPlugin` after the code block and codeMirror plugins so typing three backticks (```) followed by space or enter at the beginning of a line correctly transforms into a code block.
+* Refactored `Markdown.tsx` to render all code and mermaid blocks natively inside custom `ReactMarkdown` components, completely removing manual DOM manipulations to prevent React virtual DOM crashes.
+* Integrated browser-optimized `shiki/bundle/web` and generated unique rendering IDs for Mermaid in its execution loop to support React Strict Mode.
+* Configured Mermaid theme backgrounds to align with general theme surface variables (`var(--color-surface)`), ensuring diagrams remain fully readable in both light and dark mode contexts.
+* Created a unified `insertTextAtCursor` editor helper and attached an `onPaste` handler to support copy-pasting images/files and dropping them directly inside both Rich Editor and Raw Markdown modes.
 
 ---
 

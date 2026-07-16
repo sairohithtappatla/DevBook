@@ -128,6 +128,37 @@ input {
   --color-success-light: #0f2d19;
 }
 
+/* MDXEditor Dark Mode overrides */
+.dark .devbook-mdx select,
+.dark .devbook-mdx button[class*="selectTrigger"],
+.dark .devbook-mdx button[class*="SelectTrigger"],
+.dark .devbook-mdx [class*="selectTrigger"],
+.dark .devbook-mdx [class*="SelectTrigger"],
+.dark [class*="selectContent"],
+.dark [class*="SelectContent"],
+.dark [role="listbox"] {
+  background-color: #1f1f23 !important;
+  color: #ffffff !important;
+  border-color: #27272a !important;
+}
+
+.dark .devbook-mdx select option,
+.dark [class*="selectItem"],
+.dark [class*="SelectItem"] {
+  background-color: #1f1f23 !important;
+  color: #ffffff !important;
+}
+
+.dark .devbook-mdx select option:hover,
+.dark [class*="selectItem"]:hover,
+.dark [class*="SelectItem"]:hover,
+.dark [class*="selectItem"][data-highlighted],
+.dark [class*="SelectItem"][data-highlighted] {
+  background-color: #27272a !important;
+  color: #ffffff !important;
+}
+
+
 @keyframes fadeIn {
   from {
     opacity: 0;

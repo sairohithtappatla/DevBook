@@ -7,6 +7,7 @@ import { validateMdx, summarizeDiff, type MdxIssue } from "@/lib/mdx-validate";
 
 import { parseMarkdownToTree } from "@/lib/mock-data";
 import { useToast } from "@/providers/ToastProvider";
+
 import {
   useBook,
   useBookStructure,
@@ -135,6 +136,13 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
   const deleteStepMutation = useDeleteStep();
 
   const [tab, setTab] = useState<"editor" | "import">("editor");
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [editorView, setEditorView] = useState<"rich" | "raw">("rich");
+  const editorRef = useRef<any>(null);
+  const editorContainerRef = useRef<HTMLDivElement>(null);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+
+
 
   // Local state representing the tree of phases and steps
   const [phases, setPhases] = useState<PhaseNode[]>([]);
@@ -178,6 +186,74 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
     }
     return null;
   }, [phases, activeStepRef]);
+
+  // Scroll sync logic
+  useEffect(() => {
+    if (!activeStep) return;
+
+    const previewEl = previewContainerRef.current;
+    const editorRoot = editorContainerRef.current;
+    if (!previewEl || !editorRoot) return;
+
+    const findScrollableParent = (el: HTMLElement | null): HTMLElement | null => {
+      if (!el) return null;
+      const style = window.getComputedStyle(el);
+      if (style.overflowY === "auto" || style.overflowY === "scroll") {
+        return el;
+      }
+      return findScrollableParent(el.parentElement);
+    };
+
+    // Find the actual scrollable element in the editor (rich contenteditable vs raw textarea)
+    const contentEditable = editorRoot.querySelector(".mdx-content");
+    const textarea = editorRoot.querySelector("textarea");
+    const editorEl = contentEditable
+      ? findScrollableParent(contentEditable as HTMLElement)
+      : (textarea as HTMLElement);
+
+    if (!editorEl) return;
+
+    let isSyncingEditor = false;
+    let isSyncingPreview = false;
+
+    const handleEditorScroll = () => {
+      if (isSyncingPreview) {
+        isSyncingPreview = false;
+        return;
+      }
+      isSyncingEditor = true;
+
+      const scrollRangeSrc = editorEl.scrollHeight - editorEl.clientHeight;
+      const scrollRangeDest = previewEl.scrollHeight - previewEl.clientHeight;
+      if (scrollRangeSrc > 0 && scrollRangeDest > 0) {
+        const percentage = editorEl.scrollTop / scrollRangeSrc;
+        previewEl.scrollTop = percentage * scrollRangeDest;
+      }
+    };
+
+    const handlePreviewScroll = () => {
+      if (isSyncingEditor) {
+        isSyncingEditor = false;
+        return;
+      }
+      isSyncingPreview = true;
+
+      const scrollRangeSrc = previewEl.scrollHeight - previewEl.clientHeight;
+      const scrollRangeDest = editorEl.scrollHeight - editorEl.clientHeight;
+      if (scrollRangeSrc > 0 && scrollRangeDest > 0) {
+        const percentage = previewEl.scrollTop / scrollRangeSrc;
+        editorEl.scrollTop = percentage * scrollRangeDest;
+      }
+    };
+
+    editorEl.addEventListener("scroll", handleEditorScroll, { passive: true });
+    previewEl.addEventListener("scroll", handlePreviewScroll, { passive: true });
+
+    return () => {
+      editorEl.removeEventListener("scroll", handleEditorScroll);
+      previewEl.removeEventListener("scroll", handlePreviewScroll);
+    };
+  }, [activeStep, editorView]);
 
   // Handle markdown change in active step
   const handleMarkdownChange = (val: string) => {
@@ -466,6 +542,94 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
     }
   };
 
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer.types.includes("Files")) {
+      setIsDraggingFile(true);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setIsDraggingFile(false);
+  };
+
+  const insertTextAtCursor = (textToInsert: string) => {
+    if (editorView === "rich") {
+      if (editorRef.current) {
+        editorRef.current.insertMarkdown(textToInsert);
+      } else {
+        handleMarkdownChange((activeStep?.markdown || "") + textToInsert);
+      }
+    } else {
+      const textarea = editorContainerRef.current?.querySelector("textarea");
+      if (textarea) {
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const currentText = textarea.value;
+        const before = currentText.substring(0, start);
+        const after = currentText.substring(end);
+        const newText = before + textToInsert + after;
+        
+        handleMarkdownChange(newText);
+        
+        setTimeout(() => {
+          textarea.focus();
+          const newCursorPos = start + textToInsert.length;
+          textarea.setSelectionRange(newCursorPos, newCursorPos);
+        }, 0);
+      } else {
+        handleMarkdownChange((activeStep?.markdown || "") + textToInsert);
+      }
+    }
+  };
+
+  const handleImageFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (e.target?.result) {
+        const alt = file.name.replace(/\.[^.]+$/, "") || "image";
+        const isImg = file.type.startsWith("image/");
+        const markdownLink = isImg
+          ? `\n![${alt}](${e.target.result})\n`
+          : `\n[${alt}](${e.target.result})\n`;
+        insertTextAtCursor(markdownLink);
+        showToast(`Embedded ${file.name} successfully`, "success");
+      }
+    };
+    reader.onerror = () => {
+      showToast(`Failed to read ${file.name}`, "error");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    const files: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].kind === "file") {
+        const file = items[i].getAsFile();
+        if (file) files.push(file);
+      }
+    }
+
+    if (files.length === 0) return;
+
+    e.preventDefault();
+    files.forEach(handleImageFile);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingFile(false);
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length === 0) return;
+
+    files.forEach(handleImageFile);
+  };
+
   // Dropdown / Popover visibility menu
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -752,30 +916,74 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
                 className="flex min-w-0 flex-1 overflow-hidden"
               >
                 {/* Left side editor */}
-                <div className="flex min-w-0 flex-1 flex-col border-r border-hairline overflow-hidden">
+                <div
+                  ref={editorContainerRef}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onPaste={handlePaste}
+                  className="relative flex min-w-0 flex-1 flex-col border-r border-hairline overflow-hidden"
+                >
+                  {isDraggingFile && (
+                    <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/80 border-2 border-dashed border-primary m-2 rounded-lg pointer-events-none">
+                      <Upload className="h-10 w-10 text-primary animate-bounce mb-2" />
+                      <span className="text-sm font-semibold">Drop files here to upload</span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between border-b border-hairline bg-surface/40 px-4 py-1.5 shrink-0 select-none">
                     <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                       Editor
                     </span>
-                    <span className="font-mono text-[10px] text-muted-foreground">
-                      live preview →
-                    </span>
+                    <div className="flex items-center gap-1.5 bg-surface-2 p-0.5 rounded border border-hairline select-none">
+                      <button
+                        onClick={() => setEditorView("rich")}
+                        className={`px-2 py-0.5 rounded text-[10px] cursor-pointer transition-colors ${
+                          editorView === "rich"
+                            ? "bg-white dark:bg-zinc-800 text-foreground shadow-xs font-semibold"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        Rich Editor
+                      </button>
+                      <button
+                        onClick={() => setEditorView("raw")}
+                        className={`px-2 py-0.5 rounded text-[10px] cursor-pointer transition-colors ${
+                          editorView === "raw"
+                            ? "bg-white dark:bg-zinc-800 text-foreground shadow-xs font-semibold"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        Raw Markdown
+                      </button>
+                    </div>
                   </div>
                   <div className="flex-1 min-h-0 overflow-hidden">
-                    <Suspense
-                      fallback={
-                        <div className="grid h-full place-items-center text-xs text-muted-foreground">
-                          Loading editor…
-                        </div>
-                      }
-                    >
-                      <MDXEditorComponent markdown={activeStep.markdown} onChange={handleMarkdownChange} />
-                    </Suspense>
+                    {editorView === "rich" ? (
+                      <Suspense
+                        fallback={
+                          <div className="grid h-full place-items-center text-xs text-muted-foreground">
+                            Loading editor…
+                          </div>
+                        }
+                      >
+                        <MDXEditorComponent ref={editorRef} markdown={activeStep.markdown} onChange={handleMarkdownChange} />
+                      </Suspense>
+                    ) : (
+                      <textarea
+                        value={activeStep.markdown}
+                        onChange={(e) => handleMarkdownChange(e.target.value)}
+                        className="scroll-thin h-full w-full resize-none bg-surface p-6 font-mono text-[13px] text-foreground focus:outline-none placeholder-muted-foreground border-none leading-relaxed"
+                        placeholder="Paste or write your Markdown content here..."
+                      />
+                    )}
                   </div>
                 </div>
 
                 {/* Right side live preview */}
-                <div className="hidden min-w-0 flex-1 flex-col xl:flex overflow-hidden">
+                <div
+                  ref={previewContainerRef}
+                  className="hidden min-w-0 flex-1 flex-col xl:flex overflow-hidden"
+                >
                   <div className="relative flex items-center justify-between border-b border-hairline bg-surface/40 px-4 py-1.5 shrink-0 select-none">
                     <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                       Preview

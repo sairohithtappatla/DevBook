@@ -20,8 +20,6 @@ function getEditorModule() {
 }
 
 async function uploadImage(file: File): Promise<string> {
-  // Data-URL uploader so images round-trip through markdown without a backend.
-  // Swap for a real upload endpoint (e.g. Supabase Storage) when ready.
   return await new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
@@ -29,6 +27,7 @@ async function uploadImage(file: File): Promise<string> {
     reader.readAsDataURL(file);
   });
 }
+
 
 type Props = {
   markdown: string;
@@ -69,7 +68,6 @@ export const MDXEditorComponent = forwardRef<MDXEditorMethods, Props>(
         linkDialogPlugin(),
         imagePlugin({ imageUploadHandler: uploadImage }),
         tablePlugin(),
-        markdownShortcutPlugin(),
         codeBlockPlugin({ defaultCodeBlockLanguage: "ts" }),
         codeMirrorPlugin({
           codeBlockLanguages: {
@@ -81,6 +79,7 @@ export const MDXEditorComponent = forwardRef<MDXEditorMethods, Props>(
             css: "CSS", html: "HTML", c: "C", cpp: "C++", text: "Plain text",
           },
         }),
+        markdownShortcutPlugin(),
         toolbarPlugin({
           toolbarContents: () => (
             <>

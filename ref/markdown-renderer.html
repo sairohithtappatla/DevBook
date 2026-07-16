@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leaflet — Markdown Renderer</title>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/base16/atelier-cave-dark.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.0/purify.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"></script>
+
+<style>
+  :root{
+    --ink:#100f0d;
+    --paper:#171613;
+    --panel:#1c1b17;
+    --panel-raised:#232019;
+    --line:#332f26;
+    --line-soft:#26241d;
+    --text:#eae5da;
+    --muted:#948d7c;
+    --muted-2:#6b6555;
+    --wax:#c46a3f;
+    --wax-bright:#e08a56;
+    --moss:#7c9070;
+    --gutter-bg:#141310;
+    --radius:3px;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--ink);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+    height:100vh;
+  }
+
+  ::selection{background:var(--wax); color:#fff;}
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:0 18px;
+    height:52px;
+    min-height:52px;
+    background:var(--paper);
+    border-bottom:1px solid var(--line);
+    z-index:20;
+  }
+  .brand{
+    display:flex;
+    align-items:baseline;
+    gap:9px;
+  }
+  .brand-mark{
+    font-family:'Fraunces',serif;
+    font-size:19px;
+    font-weight:600;
+    letter-spacing:0.2px;
+    color:var(--text);
+  }
+  .brand-mark span{ color:var(--wax); font-style:italic; }
+  .brand-tag{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10.5px;
+    color:var(--muted-2);
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    padding-top:2px;
+  }
+
+  .toolbar{
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .btn{
+    display:flex;
+    align-items:center;
+    gap:7px;
+    background:transparent;
+    border:1px solid var(--line);
+    color:var(--muted);
+    font-family:'Inter',sans-serif;
+    font-size:12.5px;
+    font-weight:500;
+    padding:7px 12px;
+    border-radius:var(--radius);
+    cursor:pointer;
+    transition:border-color .15s ease, color .15s ease, background .15s ease;
+    white-space:nowrap;
+  }
+  .btn:hover{
+    border-color:var(--wax);
+    color:var(--text);
+    background:var(--panel-raised);
+  }
+  .btn.primary{
+    border-color:var(--wax);
+    color:#fff;
+    background:var(--wax);
+  }
+  .btn.primary:hover{ background:var(--wax-bright); border-color:var(--wax-bright); }
+  .btn svg{ width:14px; height:14px; flex-shrink:0; }
+  .btn.icon-only{ padding:7px 9px; }
+  input[type=file]{ display:none; }
+
+  /* ---------- Main split ---------- */
+  .workspace{
+    flex:1;
+    display:flex;
+    min-height:0;
+    position:relative;
+  }
+  .pane{
+    display:flex;
+    flex-direction:column;
+    min-width:0;
+    height:100%;
+  }
+  .pane-editor{ width:50%; background:var(--paper); }
+  .pane-preview{ width:50%; background:var(--panel); border-left:1px solid var(--line); position:relative; }
+
+  .pane-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    height:34px;
+    min-height:34px;
+    padding:0 14px;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10.5px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--muted-2);
+    border-bottom:1px solid var(--line-soft);
+  }
+  .pane-header .dot{
+    width:6px; height:6px; border-radius:50%;
+    background:var(--moss);
+    display:inline-block;
+    margin-right:7px;
+  }
+
+  /* ---------- Editor ---------- */
+  .editor-wrap{
+    flex:1;
+    display:flex;
+    min-height:0;
+    position:relative;
+  }
+  #editor{
+    flex:1;
+    resize:none;
+    border:none;
+    outline:none;
+    background:transparent;
+    color:var(--text);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:13.5px;
+    line-height:1.65;
+    padding:18px 20px 60px 20px;
+    tab-size:2;
+    caret-color:var(--wax);
+  }
+  #editor::placeholder{ color:var(--muted-2); }
+
+  .drop-overlay{
+    position:absolute;
+    inset:0;
+    background:rgba(196,106,63,0.08);
+    border:2px dashed var(--wax);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:30;
+    pointer-events:none;
+  }
+  .drop-overlay.active{ display:flex; }
+  .drop-overlay-inner{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:13px;
+    color:var(--wax-bright);
+    background:var(--ink);
+    padding:14px 22px;
+    border-radius:var(--radius);
+    border:1px solid var(--wax);
+  }
+
+  .editor-footer{
+    height:26px;
+    min-height:26px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:0 14px;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10px;
+    color:var(--muted-2);
+    border-top:1px solid var(--line-soft);
+    background:var(--paper);
+    letter-spacing:0.03em;
+  }
+
+  /* ---------- Preview ---------- */
+  .preview-scroll{
+    flex:1;
+    overflow-y:auto;
+    padding:26px 34px 60px 34px;
+  }
+  .preview-scroll.fullscreen{
+    position:fixed;
+    inset:0;
+    z-index:100;
+    background:var(--panel);
+    padding:40px calc(50% - 380px);
+    max-width:none;
+  }
+  @media (max-width:900px){
+    .preview-scroll.fullscreen{ padding:30px 20px; }
+  }
+
+  .exit-fullscreen{
+    position:fixed;
+    top:16px; right:20px;
+    z-index:110;
+  }
+
+  /* ---------- Markdown content styling ---------- */
+  .md{
+    font-family:'Inter',sans-serif;
+    font-size:15.5px;
+    line-height:1.75;
+    color:var(--text);
+    max-width:760px;
+    margin:0 auto;
+  }
+  .md h1,.md h2,.md h3,.md h4,.md h5,.md h6{
+    font-family:'Fraunces',serif;
+    font-weight:600;
+    color:#fff;
+    line-height:1.25;
+    margin:1.4em 0 0.55em;
+  }
+  .md h1{ font-size:2em; border-bottom:1px solid var(--line); padding-bottom:0.3em; margin-top:0.2em;}
+  .md h2{ font-size:1.5em; border-bottom:1px solid var(--line-soft); padding-bottom:0.25em;}
+  .md h3{ font-size:1.2em; color:var(--wax-bright);}
+  .md h4{ font-size:1.05em; }
+  .md p{ margin:0.85em 0; }
+  .md a{ color:var(--wax-bright); text-decoration:underline; text-decoration-color:rgba(224,138,86,0.4); text-underline-offset:2px;}
+  .md a:hover{ text-decoration-color:var(--wax-bright); }
+  .md strong{ color:#fff; font-weight:600; }
+  .md em{ color:var(--text); }
+  .md hr{ border:none; border-top:1px solid var(--line); margin:2em 0; }
+
+  .md ul,.md ol{ margin:0.7em 0; padding-left:1.5em; }
+  .md li{ margin:0.3em 0; }
+  .md li::marker{ color:var(--wax); }
+
+  .md blockquote{
+    margin:1em 0;
+    padding:0.4em 1.1em;
+    border-left:3px solid var(--wax);
+    background:var(--panel-raised);
+    color:var(--muted);
+    border-radius:0 var(--radius) var(--radius) 0;
+  }
+  .md blockquote p{ margin:0.4em 0; }
+
+  .md code{
+    font-family:'IBM Plex Mono',monospace;
+    background:var(--gutter-bg);
+    color:var(--wax-bright);
+    padding:0.15em 0.4em;
+    border-radius:3px;
+    font-size:0.87em;
+    border:1px solid var(--line-soft);
+  }
+  .md pre{
+    background:var(--gutter-bg);
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:16px 18px;
+    overflow-x:auto;
+    margin:1.1em 0;
+    position:relative;
+  }
+  .md pre code{
+    background:none;
+    border:none;
+    padding:0;
+    color:inherit;
+    font-size:13px;
+    line-height:1.6;
+  }
+  .code-lang-tag{
+    position:absolute;
+    top:8px; right:12px;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:9.5px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--muted-2);
+  }
+
+  .md table{
+    border-collapse:collapse;
+    width:100%;
+    margin:1.2em 0;
+    font-size:0.92em;
+  }
+  .md th,.md td{
+    border:1px solid var(--line);
+    padding:8px 12px;
+    text-align:left;
+  }
+  .md th{
+    background:var(--panel-raised);
+    font-family:'Fraunces',serif;
+    font-weight:600;
+    color:#fff;
+  }
+  .md tr:nth-child(even) td{ background:rgba(255,255,255,0.015); }
+
+  .md img{
+    max-width:100%;
+    border-radius:6px;
+    border:1px solid var(--line);
+    display:block;
+    margin:1.2em auto;
+  }
+
+  .md input[type=checkbox]{
+    accent-color:var(--wax);
+    margin-right:0.5em;
+  }
+
+  .mermaid-wrap{
+    background:#0d0c0a;
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:20px;
+    margin:1.2em 0;
+    display:flex;
+    justify-content:center;
+    overflow-x:auto;
+  }
+  .mermaid-wrap svg{ max-width:100%; height:auto; }
+  .mermaid-error{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;
+    color:#e0765a;
+    background:rgba(224,118,90,0.08);
+    border:1px solid #5a3428;
+    padding:10px 14px;
+    border-radius:4px;
+    white-space:pre-wrap;
+  }
+
+  .empty-state{
+    max-width:400px;
+    margin:80px auto;
+    text-align:center;
+    color:var(--muted-2);
+  }
+  .empty-state .glyph{
+    font-family:'Fraunces',serif;
+    font-style:italic;
+    font-size:38px;
+    color:var(--line);
+    margin-bottom:10px;
+  }
+  .empty-state p{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11.5px;
+    line-height:1.8;
+    letter-spacing:0.02em;
+  }
+
+  /* scrollbars */
+  ::-webkit-scrollbar{ width:10px; height:10px; }
+  ::-webkit-scrollbar-track{ background:transparent; }
+  ::-webkit-scrollbar-thumb{ background:var(--line); border-radius:5px; }
+  ::-webkit-scrollbar-thumb:hover{ background:var(--muted-2); }
+
+  @media (max-width:760px){
+    .pane-editor,.pane-preview{ width:100%; }
+    .workspace{ flex-direction:column; }
+    .pane-preview{ border-left:none; border-top:1px solid var(--line); }
+    .brand-tag{ display:none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-mark">Leaf<span>let</span></div>
+    <div class="brand-tag">markdown, rendered plainly</div>
+  </div>
+  <div class="toolbar">
+    <button class="btn" id="uploadBtn" title="Insert image">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+      Image
+    </button>
+    <input type="file" id="fileInput" accept="image/*">
+    <button class="btn" id="sampleBtn" title="Load sample markdown">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+      Sample
+    </button>
+    <button class="btn" id="clearBtn" title="Clear editor">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z"/></svg>
+      Clear
+    </button>
+    <button class="btn primary" id="fullscreenBtn" title="Fullscreen preview">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg>
+      Fullscreen
+    </button>
+  </div>
+</div>
+
+<div class="workspace">
+  <div class="pane pane-editor">
+    <div class="pane-header"><span><span class="dot"></span>editor</span><span id="cursorPos">1:1</span></div>
+    <div class="editor-wrap">
+      <textarea id="editor" spellcheck="false" placeholder="Paste or type your markdown here.
+
+Drag & drop an image anywhere in this pane to embed it.
+
+# Try it out
+- Code blocks
+- Mermaid diagrams
+- Tables, task lists, images..."></textarea>
+      <div class="drop-overlay" id="dropOverlay"><div class="drop-overlay-inner">drop image to embed</div></div>
+    </div>
+    <div class="editor-footer">
+      <span id="charCount">0 characters</span>
+      <span id="lineCount">0 lines</span>
+    </div>
+  </div>
+
+  <div class="pane pane-preview" id="previewPane">
+    <div class="pane-header"><span><span class="dot" style="background:var(--wax)"></span>preview</span><span>live</span></div>
+    <div class="preview-scroll" id="previewScroll">
+      <div class="empty-state" id="emptyState">
+        <div class="glyph">¶</div>
+        <p>NOTHING TO RENDER YET<br>START TYPING, OR DROP IN A FILE</p>
+      </div>
+      <div class="md" id="preview"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ---------- Config ----------
+  marked.setOptions({
+    gfm: true,
+    breaks: false,
+  });
+
+  mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose',
+    themeVariables:{
+      background:'#0d0c0a', primaryColor:'#232019', primaryTextColor:'#eae5da',
+      primaryBorderColor:'#c46a3f', lineColor:'#948d7c', secondaryColor:'#1c1b17',
+      tertiaryColor:'#171613'
+    }
+  });
+
+  const editor = document.getElementById('editor');
+  const preview = document.getElementById('preview');
+  const emptyState = document.getElementById('emptyState');
+  const previewScroll = document.getElementById('previewScroll');
+  const previewPane = document.getElementById('previewPane');
+  const dropOverlay = document.getElementById('dropOverlay');
+  const charCount = document.getElementById('charCount');
+  const lineCount = document.getElementById('lineCount');
+  const cursorPos = document.getElementById('cursorPos');
+
+  let mermaidCounter = 0;
+  let renderTimer = null;
+
+  // custom renderer: tag code blocks, and pull out mermaid blocks separately
+  const renderer = new marked.Renderer();
+  const mermaidBlocks = [];
+
+  renderer.code = function(code, infostring) {
+    const lang = (infostring || '').trim().split(/\s+/)[0];
+    if (lang === 'mermaid') {
+      const id = 'mmd-' + (mermaidCounter++);
+      mermaidBlocks.push({ id, code });
+      return `<div class="mermaid-wrap" id="wrap-${id}"><div id="${id}" class="mermaid-target">rendering…</div></div>`;
+    }
+    let highlighted;
+    let validLang = lang && hljs.getLanguage(lang);
+    try {
+      highlighted = validLang ? hljs.highlight(code, { language: lang }).value : hljs.highlightAuto(code).value;
+    } catch (e) {
+      highlighted = code.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    }
+    const tag = validLang ? lang : (lang || 'text');
+    return `<pre><span class="code-lang-tag">${tag}</span><code class="hljs">${highlighted}</code></pre>`;
+  };
+
+  marked.use({ renderer });
+
+  function render() {
+    const raw = editor.value;
+    charCount.textContent = raw.length + ' character' + (raw.length === 1 ? '' : 's');
+    const lines = raw.length ? raw.split('\n').length : 0;
+    lineCount.textContent = lines + ' line' + (lines === 1 ? '' : 's');
+
+    if (!raw.trim()) {
+      preview.style.display = 'none';
+      emptyState.style.display = 'block';
+      return;
+    }
+    emptyState.style.display = 'none';
+    preview.style.display = 'block';
+
+    mermaidBlocks.length = 0;
+    mermaidCounter = 0;
+    const html = marked.parse(raw);
+    const clean = DOMPurify.sanitize(html, {
+      ADD_TAGS: ['iframe'],
+      ADD_ATTR: ['target']
+    });
+    preview.innerHTML = clean;
+
+    // render mermaid diagrams asynchronously
+    mermaidBlocks.forEach(async ({ id, code }) => {
+      const wrap = document.getElementById('wrap-' + id);
+      if (!wrap) return;
+      try {
+        const { svg } = await mermaid.render(id + '-svg', code);
+        wrap.innerHTML = svg;
+      } catch (err) {
+        wrap.innerHTML = `<div class="mermaid-error">Mermaid syntax error:\n${(err && err.message) ? err.message : err}</div>`;
+      }
+    });
+  }
+
+  function scheduleRender() {
+    clearTimeout(renderTimer);
+    renderTimer = setTimeout(render, 180);
+  }
+
+  editor.addEventListener('input', scheduleRender);
+
+  editor.addEventListener('keyup', updateCursor);
+  editor.addEventListener('click', updateCursor);
+  function updateCursor(){
+    const val = editor.value.slice(0, editor.selectionStart);
+    const lines = val.split('\n');
+    cursorPos.textContent = lines.length + ':' + (lines[lines.length-1].length + 1);
+  }
+
+  // ---------- Image insertion helpers ----------
+  function insertAtCursor(text) {
+    const start = editor.selectionStart;
+    const end = editor.selectionEnd;
+    const before = editor.value.slice(0, start);
+    const after = editor.value.slice(end);
+    editor.value = before + text + after;
+    const pos = start + text.length;
+    editor.selectionStart = editor.selectionEnd = pos;
+    editor.focus();
+    scheduleRender();
+    updateCursor();
+  }
+
+  function handleImageFile(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const alt = file.name.replace(/\.[^.]+$/, '') || 'image';
+      insertAtCursor(`\n![${alt}](${e.target.result})\n`);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // upload button
+  const fileInput = document.getElementById('fileInput');
+  document.getElementById('uploadBtn').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', (e) => {
+    if (e.target.files[0]) handleImageFile(e.target.files[0]);
+    fileInput.value = '';
+  });
+
+  // drag & drop on editor wrap
+  const editorWrap = document.querySelector('.editor-wrap');
+  let dragDepth = 0;
+  editorWrap.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    dragDepth++;
+    dropOverlay.classList.add('active');
+  });
+  editorWrap.addEventListener('dragover', (e) => e.preventDefault());
+  editorWrap.addEventListener('dragleave', (e) => {
+    dragDepth--;
+    if (dragDepth <= 0) { dragDepth = 0; dropOverlay.classList.remove('active'); }
+  });
+  editorWrap.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragDepth = 0;
+    dropOverlay.classList.remove('active');
+    const files = e.dataTransfer.files;
+    if (files && files.length) {
+      Array.from(files).forEach(handleImageFile);
+    } else {
+      const text = e.dataTransfer.getData('text/plain');
+      if (text) insertAtCursor(text);
+    }
+  });
+
+  // paste image support
+  editor.addEventListener('paste', (e) => {
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type && item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          handleImageFile(file);
+        }
+      }
+    }
+  });
+
+  // ---------- Buttons ----------
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    editor.value = '';
+    scheduleRender();
+    updateCursor();
+    editor.focus();
+  });
+
+  document.getElementById('fullscreenBtn').addEventListener('click', () => {
+    const isFs = previewScroll.classList.toggle('fullscreen');
+    if (isFs) {
+      const exitBtn = document.createElement('button');
+      exitBtn.className = 'btn primary exit-fullscreen';
+      exitBtn.id = 'exitFsBtn';
+      exitBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3m0 18v-3a2 2 0 012-2h3M3 16h3a2 2 0 012 2v3"/></svg> Exit fullscreen';
+      document.body.appendChild(exitBtn);
+      exitBtn.addEventListener('click', exitFullscreen);
+      document.addEventListener('keydown', escListener);
+    } else {
+      exitFullscreen();
+    }
+  });
+
+  function exitFullscreen() {
+    previewScroll.classList.remove('fullscreen');
+    const btn = document.getElementById('exitFsBtn');
+    if (btn) btn.remove();
+    document.removeEventListener('keydown', escListener);
+  }
+  function escListener(e) {
+    if (e.key === 'Escape') exitFullscreen();
+  }
+
+  const SAMPLE = `# Leaflet Demo
+
+A quick tour of what this renderer supports — **bold**, *italics*, ~~strikethrough~~, and \`inline code\`.
+
+## Lists
+
+- Task lists:
+  - [x] Parse GitHub-flavored markdown
+  - [x] Highlight code blocks
+  - [ ] Convince you to drop an image in
+
+## Code block
+
+\`\`\`javascript
+function greet(name) {
+  const message = \`Hello, \${name}!\`;
+  console.log(message);
+  return message;
+}
+\`\`\`
+
+## Mermaid diagram
+
+\`\`\`mermaid
+flowchart LR
+  A[Write Markdown] --> B{Valid syntax?}
+  B -- yes --> C[Rendered live]
+  B -- no --> D[Helpful error]
+  C --> E[Fullscreen preview]
+\`\`\`
+
+## Table
+
+| Feature | Status |
+|---|---|
+| Code highlighting | ✅ |
+| Mermaid diagrams | ✅ |
+| Image drag & drop | ✅ |
+| Fullscreen mode | ✅ |
+
+> Drop an image anywhere in the editor pane, or use the Image button above.
+
+---
+
+Built for pasting in whatever markdown you throw at it.
+`;
+
+  document.getElementById('sampleBtn').addEventListener('click', () => {
+    editor.value = SAMPLE;
+    scheduleRender();
+    updateCursor();
+  });
+
+  // init
+  render();
+</script>
+</body>
+</html>

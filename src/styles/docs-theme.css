@@ -218,18 +218,18 @@ svg[id^="mmd-"] * {
   font-family: var(--font-sans), system-ui, sans-serif !important;
 }
 
-/* Ensure Mermaid text/labels are always light/white to contrast against the dark background */
-svg[id^="mmd-"] text,
-svg[id^="mmd-"] span,
-svg[id^="mmd-"] div,
-svg[id^="mmd-"] p,
-svg[id^="mmd-"] foreignObject *,
-svg[id^="mmd-"] .nodeText,
-svg[id^="mmd-"] .labelText,
-svg[id^="mmd-"] .edgeLabel {
-  fill: #ededed !important;
-  color: #ededed !important;
-}
+  /* Ensure Mermaid text/labels are always light/white in dark theme to contrast against the dark background */
+  .dark svg[id^="mmd-"] text,
+  .dark svg[id^="mmd-"] span,
+  .dark svg[id^="mmd-"] div,
+  .dark svg[id^="mmd-"] p,
+  .dark svg[id^="mmd-"] foreignObject *,
+  .dark svg[id^="mmd-"] .nodeText,
+  .dark svg[id^="mmd-"] .labelText,
+  .dark svg[id^="mmd-"] .edgeLabel {
+    fill: #ffffff !important;
+    color: #ffffff !important;
+  }
 
 /* Prose */
 .prose-docs {
