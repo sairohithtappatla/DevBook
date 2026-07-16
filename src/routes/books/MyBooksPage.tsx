@@ -9,7 +9,6 @@ import {
   Eye,
   Globe,
   Lock,
-  MoreVertical,
   Pencil,
   Plus,
   SlidersHorizontal,

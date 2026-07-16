@@ -25,7 +25,6 @@ import {
   useCreateStep,
   useUpdateStep,
   useDeleteStep,
-  useDeleteBook,
 } from "@/hooks/useBooks";
 import {
   type DragEndEvent,
@@ -90,7 +89,6 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
   const createStepMutation = useCreateStep();
   const updateStepMutation = useUpdateStep();
   const deleteStepMutation = useDeleteStep();
-  const deleteBookMutation = useDeleteBook();
   const uploadAttachmentMutation = useUploadAttachment();
 
   const { user } = useAuth();
@@ -734,17 +732,6 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
     }
   };
 
-  const handleBookDelete = async () => {
-    const confirm = window.confirm("Are you sure you want to delete this book? This cannot be undone.");
-    if (!confirm) return;
-    try {
-      await deleteBookMutation.mutateAsync(bookId);
-      showToast("Book deleted successfully", "success");
-      onBack();
-    } catch (err) {
-      showToast("Failed to delete book", "error");
-    }
-  };
 
   return (
     <div className="editor-page h-screen bg-background text-foreground font-sans flex flex-col relative overflow-hidden">
@@ -1099,7 +1086,6 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
                 <PreviewArea
                   previewContainerRef={previewContainerRef}
                   previewMarkdown={previewMarkdown}
-                  dbBook={dbBook}
                 />
               </motion.div>
 

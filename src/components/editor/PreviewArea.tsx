@@ -1,25 +1,15 @@
 import { memo } from "react";
-import {
-  MoreVertical,
-  Globe,
-  Lock,
-  Users,
-  Check,
-  Trash2,
-} from "lucide-react";
 import { Markdown } from "@/components/Markdown";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 
 type PreviewAreaProps = {
   previewContainerRef: React.RefObject<HTMLDivElement | null>;
   previewMarkdown: string;
-  dbBook: any;
 };
 
 export const PreviewArea = memo(function PreviewArea({
   previewContainerRef,
   previewMarkdown,
-  dbBook,
 }: PreviewAreaProps) {
   return (
     <div
