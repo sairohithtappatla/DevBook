@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useCallback } from "react";
+import React, { createContext, useState, useCallback, useRef, useEffect } from "react";
 import { CheckCircle, AlertTriangle, AlertCircle, Info, X } from "lucide-react";
 
 type ToastType = "success" | "info" | "warning" | "error";
@@ -13,22 +13,35 @@ type ToastContextType = {
   showToast: (message: string, type?: ToastType) => void;
 };
 
-const ToastContext = createContext<ToastContextType | undefined>(undefined);
+export const ToastContext = createContext<ToastContextType | undefined>(undefined);
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const timeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  useEffect(() => {
+    const timeouts = timeoutsRef.current;
+    return () => {
+      Object.values(timeouts).forEach(clearTimeout);
+    };
+  }, []);
 
   const showToast = useCallback((message: string, type: ToastType = "success") => {
     const id = Math.random().toString(36).substring(2, 9);
     setToasts((prev) => [...prev, { id, message, type }]);
 
-    setTimeout(() => {
+    timeoutsRef.current[id] = setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
+      delete timeoutsRef.current[id];
     }, 3000);
   }, []);
 
   const removeToast = (id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
+    if (timeoutsRef.current[id]) {
+      clearTimeout(timeoutsRef.current[id]);
+      delete timeoutsRef.current[id];
+    }
   };
 
   const getIcon = (type: ToastType) => {
@@ -91,10 +104,4 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function useToast() {
-  const context = useContext(ToastContext);
-  if (!context) {
-    throw new Error("useToast must be used within a ToastProvider");
-  }
-  return context;
-}
+

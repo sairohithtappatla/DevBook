@@ -43,7 +43,7 @@ export function AppShell({
 
 
   return (
-    <div className="h-screen w-screen flex overflow-hidden bg-surface-secondary text-text-primary">
+    <div className="h-screen w-screen flex overflow-hidden bg-surface-secondary text-text-primary transition-colors duration-200 ease-in-out">
       {/* Permanent Left Sidebar (>= 1024px) - spans full height */}
       <Sidebar
         currentTab={currentTab}

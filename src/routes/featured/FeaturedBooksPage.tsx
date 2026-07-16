@@ -1,22 +1,22 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { BookGrid } from "@/components/books/BookGrid";
 import type { BookData } from "@/components/books/BookCard";
 import { useSearch } from "@/providers/SearchProvider";
 import { CategoriesWidget } from "@/components/home/CategoriesWidget";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useBooks } from "@/hooks/useBooks";
+import { useBooks, useBookStepCounts } from "@/hooks/useBooks";
 
-function mapDBBookToBookData(dbBook: any): BookData {
+function mapDBBookToBookData(dbBook: any, stepCounts?: Record<string, number>): BookData {
   return {
     id: dbBook.id,
     title: dbBook.title,
     description: dbBook.description || "",
     cover_url: dbBook.cover_url || "workflow",
-    steps_count: 12,
+    steps_count: stepCounts?.[dbBook.id] || 0,
     author: {
-      name: "DevBook Creator",
-      avatar_url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80"
+      name: dbBook.creator?.name || "Unknown Author",
+      avatar_url: dbBook.creator?.avatar_url || "https://api.dicebear.com/9.x/glass/svg?seed=creator"
     },
     created_at: dbBook.created_at,
     tags: dbBook.tags
@@ -35,6 +35,8 @@ export function FeaturedBooksPage({
   onBookSelect,
 }: FeaturedBooksPageProps) {
   const { data: dbBooks = [] } = useBooks();
+  const bookIds = useMemo(() => dbBooks.map((b) => b.id), [dbBooks]);
+  const { data: stepCounts } = useBookStepCounts(bookIds);
 
   const { searchQuery } = useSearch();
   const [currentPage, setCurrentPage] = useState(1);
@@ -52,7 +54,9 @@ export function FeaturedBooksPage({
     return (book.tags || []).some(tag => tag.toLowerCase() === selectedCategory.toLowerCase());
   });
 
-  const filteredBooks = filteredDBBooks.map(mapDBBookToBookData);
+  const filteredBooks = useMemo(() => {
+    return filteredDBBooks.map((b) => mapDBBookToBookData(b, stepCounts));
+  }, [filteredDBBooks, stepCounts]);
 
   // Calculate dynamic page sizes based on columns to keep EXACTLY 4 rows per page:
   useEffect(() => {

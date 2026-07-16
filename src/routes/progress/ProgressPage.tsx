@@ -1,12 +1,11 @@
-import { useState, useEffect } from "react";
-import { useBooks } from "@/hooks/useBooks";
-import { useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect, useMemo } from "react";
+import { useBooks, useBookStepCounts } from "@/hooks/useBooks";
 import { useAuth } from "@/hooks/useAuth";
-import { insforge } from "@/lib/insforge";
+import { useResetBookProgress } from "@/hooks/useProgress";
 
-function mapDBBookToProgressBook(dbBook: any): ProgressBook {
+function mapDBBookToProgressBook(dbBook: any, stepCounts?: Record<string, number>): ProgressBook {
   let stepsCompleted = 0;
-  let stepsTotal = 2;
+  let stepsTotal = stepCounts?.[dbBook.id] || 0;
   let percentage = 0;
   let lastRead = "Not started yet";
 
@@ -15,7 +14,7 @@ function mapDBBookToProgressBook(dbBook: any): ProgressBook {
     if (savedMeta) {
       const parsed = JSON.parse(savedMeta);
       stepsCompleted = parsed.stepsCompleted ?? 0;
-      stepsTotal = parsed.stepsTotal ?? 2;
+      stepsTotal = parsed.stepsTotal ?? stepsTotal;
       percentage = parsed.percentage ?? 0;
       lastRead = parsed.lastRead ?? "Not started yet";
     }
@@ -26,7 +25,8 @@ function mapDBBookToProgressBook(dbBook: any): ProgressBook {
   return {
     id: dbBook.id,
     title: dbBook.title,
-    author: "DevBook Creator",
+    author: dbBook.creator?.name || "Unknown Author",
+    category: dbBook.tags?.[0] || "Uncategorized",
     stepsCompleted,
     stepsTotal,
     percentage,
@@ -51,6 +51,7 @@ type ProgressBook = {
   id: string;
   title: string;
   author: string;
+  category: string;
   stepsCompleted: number;
   stepsTotal: number;
   percentage: number;
@@ -90,66 +91,27 @@ function BookCoverSVG({ type }: { type: string }) {
   );
 }
 
-function getCategoryLabel(type: string): string {
-  const key = (type || "").toLowerCase();
-  if (key.includes("docker") || key.includes("devops")) return "DevOps";
-  if (key.includes("database") || key.includes("postgres") || key.includes("databases")) return "Databases";
-  if (key.includes("system design") || (key.includes("system") && key.includes("design"))) return "System Design";
-  if (key.includes("api design") || key.includes("api")) return "API Design";
-  if (key.includes("architecture")) return "Architecture";
-  if (key.includes("backend") || key.includes("python") || key.includes("django") || key.includes("node")) return "Backend";
-  return "others";
-}
-
 export function ProgressPage({ onBookSelect }: { onBookSelect?: (bookId: string) => void } = {}) {
   const { data: dbBooks = [] } = useBooks();
-  const books = dbBooks.map(mapDBBookToProgressBook);
-  const queryClient = useQueryClient();
+  const bookIds = useMemo(() => dbBooks.map((b) => b.id), [dbBooks]);
+  const { data: stepCounts } = useBookStepCounts(bookIds);
+
+  const books = useMemo(() => {
+    return dbBooks.map((b) => mapDBBookToProgressBook(b, stepCounts));
+  }, [dbBooks, stepCounts]);
+
   const { user } = useAuth();
   const [resetConfirmBookId, setResetConfirmBookId] = useState<string | null>(null);
+
+  const resetProgressMutation = useResetBookProgress();
 
   const handleResetProgress = async (bookId: string) => {
     try {
       localStorage.removeItem(`book-meta-progress-${bookId}`);
       
       if (user?.id) {
-        // Fetch phases for this book
-        const { data: phases } = await insforge.database
-          .from("phases")
-          .select("id")
-          .eq("book_id", bookId);
-        
-        const phaseIds = phases?.map((p) => p.id) || [];
-        if (phaseIds.length > 0) {
-          // Fetch steps for these phases
-          const { data: steps } = await insforge.database
-            .from("steps")
-            .select("id")
-            .in("phase_id", phaseIds);
-          
-          const stepIds = steps?.map((s) => s.id) || [];
-          if (stepIds.length > 0) {
-            // Delete step progresses in database
-            await insforge.database
-              .from("step_progress")
-              .delete()
-              .eq("user_id", user.id)
-              .in("step_id", stepIds);
-          }
-        }
-        
-        // Reset book progress percentage in database
-        await insforge.database
-          .from("book_progress")
-          .update({ progress_percentage: 0, last_read_step_id: null })
-          .eq("user_id", user.id)
-          .eq("book_id", bookId);
-          
-        queryClient.invalidateQueries({ queryKey: ["step-progresses", user.id] });
-        queryClient.invalidateQueries({ queryKey: ["book-progress", user.id, bookId] });
+        await resetProgressMutation.mutateAsync({ userId: user.id, bookId });
       }
-      
-      queryClient.invalidateQueries({ queryKey: ["books"] });
     } catch (e) {
       console.error(e);
     }
@@ -298,7 +260,7 @@ export function ProgressPage({ onBookSelect }: { onBookSelect?: (bookId: string)
                 </td>
                 <td>
                   <span className="font-medium text-xs text-text-secondary">
-                    {getCategoryLabel(book.coverType)}
+                    {book.category}
                   </span>
                 </td>
                 <td>

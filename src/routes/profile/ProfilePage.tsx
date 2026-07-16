@@ -8,12 +8,15 @@ import {
   MapPin,
   Briefcase,
   Camera,
+  Loader2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { useBooks } from "@/hooks/useBooks";
-import { useAllProfiles } from "@/hooks/useProfile";
+import { useBooks, useBookStepCounts } from "@/hooks/useBooks";
+import { useAllProfiles, useUpdateProfile } from "@/hooks/useProfile";
+import { useFollowers, useFollowing, useFollowUser, useUnfollowUser } from "@/hooks/useFollow";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { BookCard, type BookData } from "@/components/books/BookCard";
+import { useToast } from "@/hooks/useToast";
 
 export type Socials = { github: string; linkedin: string; portfolio: string; email: string };
 export type ProfileData = {
@@ -28,7 +31,6 @@ export type ProfileData = {
 };
 
 const KEY = "devbook-profile-v1";
-const FOLLOW_KEY = "devbook-follows-v1";
 
 // Helper icons
 function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -87,15 +89,15 @@ const SOCIAL_FIELDS: {
     },
   ];
 
-function mapDBBookToBookData(dbBook: any): BookData {
+function mapDBBookToBookData(dbBook: any, stepCounts?: Record<string, number>): BookData {
   return {
     id: dbBook.id,
     title: dbBook.title,
     description: dbBook.description || "",
     cover_url: dbBook.cover_url || "workflow",
-    steps_count: 12,
+    steps_count: stepCounts?.[dbBook.id] || 0,
     author: {
-      name: "DevBook Creator",
+      name: dbBook.creator?.name || "Unknown Author",
       avatar_url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80"
     },
     created_at: dbBook.created_at,
@@ -105,101 +107,154 @@ function mapDBBookToBookData(dbBook: any): BookData {
 
 export function ProfilePage() {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const { data: dbBooks = [] } = useBooks();
+  const bookIds = useMemo(() => dbBooks.map((book) => book.id), [dbBooks]);
+  const { data: stepCounts } = useBookStepCounts(bookIds);
   const { data: dbProfiles = [] } = useAllProfiles();
 
   const [activeUsername, setActiveUsername] = useState<string>("me");
 
-  // Load and sync localStorage state
-  const [me, setMe] = useState<ProfileData>(() => {
-    const fallback: ProfileData = {
-      name: user?.profile?.name || "You",
-      username: "you",
-      title: "Backend engineer",
-      location: "Remote",
-      about: "Backend engineer, learning by shipping. Building agents, backends, and the occasional side project.",
-      avatar: user?.profile?.avatar_url || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80",
-      socials: { github: "https://github.com/you", linkedin: "https://linkedin.com/in/you", portfolio: "https://you.dev", email: "you@devbook.dev" },
-      updatedAt: Date.now(),
-    };
-    if (typeof window === "undefined") return fallback;
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (!raw) return fallback;
-      const parsed = JSON.parse(raw) as Partial<ProfileData>;
-      return {
-        name: parsed.name ?? fallback.name,
-        username: parsed.username ?? fallback.username,
-        title: parsed.title ?? fallback.title,
-        location: parsed.location ?? fallback.location,
-        about: parsed.about ?? fallback.about,
-        avatar: parsed.avatar ?? fallback.avatar,
-        socials: { ...fallback.socials, ...(parsed.socials ?? {}) },
-        updatedAt: parsed.updatedAt ?? fallback.updatedAt,
-      };
-    } catch {
-      return fallback;
-    }
-  });
+  // Parse JSON-encoded bio fields or fallback to defaults
+  const parseBio = (dbProfile: any, fallbackName: string, fallbackAvatar: string) => {
+    const fallbackSocials = { github: "", linkedin: "", portfolio: "", email: "" };
+    let title = "Developer";
+    let location = "Remote";
+    let about = dbProfile?.bio || "Full Stack Engineer building projects.";
+    let socials = fallbackSocials;
+    let username = (dbProfile?.name || "user").toLowerCase().replace(/\s+/g, "_");
 
-  const [following, setFollowing] = useState<string[]>(() => {
-    if (typeof window === "undefined") return [];
     try {
-      const raw = localStorage.getItem(FOLLOW_KEY);
-      if (!raw) return [];
-      const arr = JSON.parse(raw);
-      return Array.isArray(arr) ? arr.filter((x) => typeof x === "string") : [];
-    } catch {
-      return [];
+      if (dbProfile?.bio?.startsWith("{")) {
+        const parsed = JSON.parse(dbProfile.bio);
+        title = parsed.title || title;
+        location = parsed.location || location;
+        about = parsed.about || about;
+        socials = { ...fallbackSocials, ...(parsed.socials || {}) };
+        username = parsed.username || username;
+      }
+    } catch (e) {
+      // Ignore
     }
-  });
 
-  const updateMe = (patch: Partial<ProfileData>) => {
-    const updated = {
-      ...me,
-      ...patch,
-      socials: { ...me.socials, ...(patch.socials ?? {}) },
-      updatedAt: Date.now(),
+    return {
+      id: dbProfile?.id || "",
+      name: dbProfile?.name || fallbackName,
+      username,
+      title,
+      location,
+      about,
+      avatar: dbProfile?.avatar_url || fallbackAvatar,
+      socials,
     };
-    setMe(updated);
-    try {
-      localStorage.setItem(KEY, JSON.stringify(updated));
-    } catch { }
   };
 
-  const toggleFollow = (username: string) => {
-    const has = following.includes(username);
-    const updated = has ? following.filter((u) => u !== username) : [...following, username];
-    setFollowing(updated);
-    try {
-      localStorage.setItem(FOLLOW_KEY, JSON.stringify(updated));
-    } catch { }
-  };
+  const myDbProfile = useMemo(() => dbProfiles.find((p) => p.id === user?.id) || null, [dbProfiles, user?.id]);
+  const updateProfileMutation = useUpdateProfile();
+
+  // Load and sync database profile state
+  const me = useMemo<ProfileData>(() => {
+    const fallbackName = user?.profile?.name || "You";
+    const fallbackAvatar = user?.profile?.avatar_url || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80";
+    const parsed = parseBio(myDbProfile, fallbackName, fallbackAvatar);
+    return {
+      name: parsed.name,
+      username: parsed.username || "you",
+      title: parsed.title,
+      location: parsed.location,
+      about: parsed.about,
+      avatar: parsed.avatar,
+      socials: parsed.socials,
+      updatedAt: Date.now(),
+    };
+  }, [myDbProfile, user]);
+
+  // Load and query real follow relationships
+  const { data: myFollowing = [] } = useFollowing(user?.id);
+  const followMutation = useFollowUser();
+  const unfollowMutation = useUnfollowUser();
 
   // Derive followers and following from dbProfiles
   const otherUsers = useMemo(() => {
     return dbProfiles
       .filter((p) => p.id !== user?.id)
       .map((p) => {
-        const username = (p.name || "user").toLowerCase().replace(/\s+/g, "_");
-        return {
-          id: p.id,
-          username,
-          name: p.name || "DevBook Creator",
-          avatar: p.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80",
-          about: p.bio || "Full Stack Engineer building projects.",
-          bio: p.bio || "Full Stack Engineer building projects.",
-          title: "Developer",
-          location: "Remote",
-          socials: {
-            github: `https://github.com/${username}`,
-            linkedin: `https://linkedin.com/in/${username}`,
-            portfolio: "",
-            email: "",
-          },
-        };
+        const fallbackName = p.name || "Unknown Author";
+        const fallbackAvatar = p.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80";
+        return parseBio(p, fallbackName, fallbackAvatar);
       });
   }, [dbProfiles, user?.id]);
+
+  // Determine current active profile to view (temporary/inline calculation to get ID)
+  const targetUserId = useMemo(() => {
+    if (activeUsername === "me") return user?.id;
+    const found = otherUsers.find((u) => u.username === activeUsername);
+    return found?.id;
+  }, [activeUsername, otherUsers, user?.id]);
+
+  const { data: dbFollowers = [] } = useFollowers(targetUserId);
+  const { data: dbFollowing = [] } = useFollowing(targetUserId);
+
+  const following = useMemo(() => {
+    return myFollowing.map((p) => (p.name || "user").toLowerCase().replace(/\s+/g, "_"));
+  }, [myFollowing]);
+
+  const updateMe = (patch: Partial<ProfileData>, options?: { onSuccess?: () => void }) => {
+    if (!user?.id) return;
+    const updated = {
+      ...me,
+      ...patch,
+      socials: { ...me.socials, ...(patch.socials ?? {}) },
+    };
+
+    const bioJson = JSON.stringify({
+      title: updated.title,
+      location: updated.location,
+      about: updated.about,
+      socials: updated.socials,
+      username: updated.username,
+    });
+
+    updateProfileMutation.mutate({
+      userId: user.id,
+      updates: {
+        name: updated.name,
+        avatar_url: updated.avatar,
+        bio: bioJson,
+      },
+    }, {
+      onSuccess: () => {
+        try {
+          localStorage.setItem(KEY, JSON.stringify(updated));
+        } catch { }
+        showToast("Profile details updated successfully", "success");
+        options?.onSuccess?.();
+      },
+      onError: (err: any) => {
+        showToast(`Failed to update profile: ${err.message || err}`, "error");
+      }
+    });
+  };
+
+  const toggleFollow = (targetUsername: string) => {
+    if (!user?.id) return;
+    const targetProfile = dbProfiles.find(
+      (p) => {
+        const fallbackName = p.name || "Unknown Author";
+        const fallbackAvatar = p.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80";
+        const parsed = parseBio(p, fallbackName, fallbackAvatar);
+        return parsed.username === targetUsername;
+      }
+    );
+    if (!targetProfile) return;
+
+    const isFollowing = myFollowing.some((x) => x.id === targetProfile.id);
+    if (isFollowing) {
+      unfollowMutation.mutate({ followerId: user.id, followingId: targetProfile.id });
+    } else {
+      followMutation.mutate({ followerId: user.id, followingId: targetProfile.id });
+    }
+  };
 
   // Determine current active profile to view
   const currentProfile = useMemo(() => {
@@ -250,23 +305,35 @@ export function ProfilePage() {
 
   // Followers list for target profile
   const followersList = useMemo(() => {
-    if (activeUsername === "me") return otherUsers;
-    return otherUsers.filter((p) => p.username !== activeUsername).slice(0, 3);
-  }, [otherUsers, activeUsername]);
+    return dbFollowers.map((p) => {
+      const username = (p.name || "user").toLowerCase().replace(/\s+/g, "_");
+      return {
+        username,
+        name: p.name || "Unknown Author",
+        avatar: p.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80",
+        bio: p.bio || "Full Stack Engineer building projects.",
+      };
+    });
+  }, [dbFollowers]);
 
   // Following list for target profile
   const followingList = useMemo(() => {
-    if (activeUsername === "me") {
-      return otherUsers.filter((p) => following.includes(p.username));
-    }
-    return otherUsers.filter((p) => p.username !== activeUsername).slice(1, 4);
-  }, [otherUsers, following, activeUsername]);
+    return dbFollowing.map((p) => {
+      const username = (p.name || "user").toLowerCase().replace(/\s+/g, "_");
+      return {
+        username,
+        name: p.name || "Unknown Author",
+        avatar: p.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80",
+        bio: p.bio || "Full Stack Engineer building projects.",
+      };
+    });
+  }, [dbFollowing]);
 
   const userBooks = useMemo(() => {
     return dbBooks
       .filter((b) => b.created_by === currentProfile.id)
-      .map(mapDBBookToBookData);
-  }, [dbBooks, currentProfile.id]);
+      .map((book) => mapDBBookToBookData(book, stepCounts));
+  }, [dbBooks, currentProfile.id, stepCounts]);
 
   return (
     <PageContainer className="flex flex-col justify-start pb-6">
@@ -293,6 +360,7 @@ export function ProfilePage() {
       <ProfileView
         profile={currentProfile}
         updateMe={updateMe}
+        isPending={updateProfileMutation.isPending}
         publishedCount={publishedCount}
         followers={followersList}
         following={followingList}
@@ -331,7 +399,8 @@ type ViewProps = {
     socials: Socials;
     editable: boolean;
   };
-  updateMe: (patch: Partial<ProfileData>) => void;
+  updateMe: (patch: Partial<ProfileData>, options?: { onSuccess?: () => void }) => void;
+  isPending: boolean;
   publishedCount: number;
   followers: { username: string; name: string; avatar: string; bio: string }[];
   following: { username: string; name: string; avatar: string; bio: string }[];
@@ -343,6 +412,7 @@ type ViewProps = {
 export function ProfileView({
   profile,
   updateMe,
+  isPending,
   publishedCount,
   followers,
   following,
@@ -406,8 +476,11 @@ export function ProfileView({
       about: draftAbout.trim(),
       avatar: draftAvatar,
       socials: normalizeSocials(draftSocials),
+    }, {
+      onSuccess: () => {
+        setEditing(false);
+      }
     });
-    setEditing(false);
   }
 
   function onPickAvatar(file: File | undefined) {
@@ -450,7 +523,8 @@ export function ProfileView({
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-surface text-text-primary text-xs hover:bg-surface-secondary cursor-pointer transition-colors shadow-xs animate-in fade-in duration-200"
+                    disabled={isPending}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-surface text-text-primary text-xs hover:bg-surface-secondary cursor-pointer transition-colors shadow-xs animate-in fade-in duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Camera className="w-3.5 h-3.5" />
                     <span>Upload photo</span>
@@ -460,6 +534,7 @@ export function ProfileView({
                     type="file"
                     accept="image/*"
                     className="hidden"
+                    disabled={isPending}
                     onChange={(e) => onPickAvatar(e.target.files?.[0])}
                   />
                 </div>
@@ -475,8 +550,9 @@ export function ProfileView({
                     value={draftUsername}
                     onChange={(e) => setDraftUsername(e.target.value.toLowerCase().replace(/\s+/g, ""))}
                     placeholder="alias"
+                    disabled={isPending}
                     style={{ fontSize: "10px", fontFamily: "var(--font-code, monospace)" }}
-                    className={`h-7 bg-transparent text-text-primary font-mono text-xs outline-hidden border-b border-border/80 focus:border-primary px-0 pb-0.5 transition-all ${usernameError ? "border-destructive/60" : "border-border/0"
+                    className={`h-7 bg-transparent text-text-primary font-mono text-xs outline-hidden border-b border-border/80 focus:border-primary px-0 pb-0.5 transition-all disabled:opacity-50 ${usernameError ? "border-destructive/60" : "border-border/0"
                       }`}
                   />
                   {usernameError && (
@@ -493,8 +569,9 @@ export function ProfileView({
                     value={draftName}
                     onChange={(e) => setDraftName(e.target.value)}
                     placeholder="Your name"
+                    disabled={isPending}
                     style={{ fontSize: "24px", fontWeight: "700", letterSpacing: "-0.025em", lineHeight: "2rem" }}
-                    className={`w-full max-w-sm bg-transparent text-text-primary text-2xl font-bold tracking-tight outline-hidden border-b border-border/80 focus:border-primary px-0 pb-1 leading-tight transition-all ${nameError ? "border-destructive/60" : "border-border/0"
+                    className={`w-full max-w-sm bg-transparent text-text-primary text-2xl font-bold tracking-tight outline-hidden border-b border-border/80 focus:border-primary px-0 pb-1 leading-tight transition-all disabled:opacity-50 ${nameError ? "border-destructive/60" : "border-border/0"
                       }`}
                   />
                   {nameError && (
@@ -515,6 +592,7 @@ export function ProfileView({
                     onChange={setDraftTitle}
                     placeholder="Title (e.g. Backend engineer)"
                     max={80}
+                    disabled={isPending}
                   />
                   <FieldInput
                     icon={<MapPin className="h-3.5 w-3.5 text-text-secondary/60" />}
@@ -522,6 +600,7 @@ export function ProfileView({
                     onChange={setDraftLocation}
                     placeholder="Location"
                     max={80}
+                    disabled={isPending}
                   />
                 </div>
               ) : (
@@ -548,8 +627,9 @@ export function ProfileView({
                     onChange={(e) => setDraftAbout(e.target.value.slice(0, 250))}
                     rows={3}
                     placeholder="Bio — a couple of lines about you"
+                    disabled={isPending}
                     style={{ fontSize: "14px", lineHeight: "1.5rem" }}
-                    className="w-full max-w-xl bg-transparent text-text-secondary text-sm leading-relaxed outline-hidden border-b border-border/80 focus:border-primary px-0 py-1 resize-none transition-all"
+                    className="w-full max-w-xl bg-transparent text-text-secondary text-sm leading-relaxed outline-hidden border-b border-border/80 focus:border-primary px-0 py-1 resize-none transition-all disabled:opacity-50"
                   />
                   <div className="mt-1 text-[10px] font-mono text-muted-foreground">
                     {draftAbout.length}/250
@@ -587,6 +667,7 @@ export function ProfileView({
               value={profile.editable && editing ? draftSocials : profile.socials}
               onChange={setDraftSocials}
               errors={profile.editable && editing ? socialErrors : undefined}
+              disabled={isPending}
             />
 
             {profile.editable ? (
@@ -594,14 +675,25 @@ export function ProfileView({
                 <div className="flex gap-2">
                   <button
                     onClick={saveEdit}
-                    disabled={hasErrors}
+                    disabled={hasErrors || isPending}
                     className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 px-3 py-1.5 text-xs font-bold cursor-pointer transition-all"
                   >
-                    <Check className="h-3.5 w-3.5" /> Save
+                    {isPending ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="h-3.5 w-3.5" />
+                        <span>Save</span>
+                      </>
+                    )}
                   </button>
                   <button
                     onClick={() => setEditing(false)}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-surface hover:bg-surface-secondary px-3 py-1.5 text-xs text-text-secondary cursor-pointer transition-colors"
+                    disabled={isPending}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-surface hover:bg-surface-secondary px-3 py-1.5 text-xs text-text-secondary cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -696,22 +788,25 @@ function FieldInput({
   onChange,
   placeholder,
   max,
+  disabled,
 }: {
   icon: React.ReactNode;
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
   max?: number;
+  disabled?: boolean;
 }) {
   return (
-    <label className="flex items-center gap-1.5 bg-transparent border-b border-border/80 focus-within:border-primary transition-all py-1 px-0">
+    <label className={`flex items-center gap-1.5 bg-transparent border-b border-border/80 focus-within:border-primary transition-all py-1 px-0 ${disabled ? "opacity-50" : ""}`}>
       {icon}
       <input
         value={value}
         onChange={(e) => onChange(max ? e.target.value.slice(0, max) : e.target.value)}
         placeholder={placeholder}
+        disabled={disabled}
         style={{ fontSize: "12px" }}
-        className="min-w-0 flex-1 bg-transparent text-xs outline-hidden placeholder:text-muted-foreground/60 text-text-secondary py-0 px-0"
+        className="min-w-0 flex-1 bg-transparent text-xs outline-hidden placeholder:text-muted-foreground/60 text-text-secondary py-0 px-0 disabled:cursor-not-allowed"
       />
     </label>
   );
@@ -722,11 +817,13 @@ function SocialsPanel({
   value,
   onChange,
   errors,
+  disabled,
 }: {
   editing: boolean;
   value: Socials;
   onChange: (s: Socials) => void;
   errors?: Record<keyof Socials, string | null>;
+  disabled?: boolean;
 }) {
   if (editing) {
     return (
@@ -735,7 +832,7 @@ function SocialsPanel({
           const Icon = f.icon;
           const err = errors?.[f.key];
           return (
-            <div key={f.key}>
+            <div key={f.key} className={disabled ? "opacity-50" : ""}>
               <label
                 className={`flex items-center gap-2 rounded-lg border bg-surface px-3 py-1.5 focus-within:border-primary transition-all ${err ? "border-destructive/60" : "border-border"
                   }`}
@@ -745,8 +842,9 @@ function SocialsPanel({
                   value={value[f.key]}
                   onChange={(e) => onChange({ ...value, [f.key]: e.target.value })}
                   placeholder={f.placeholder}
+                  disabled={disabled}
                   style={{ fontSize: "12px" }}
-                  className="min-w-0 flex-1 bg-transparent text-xs outline-hidden placeholder:text-muted-foreground/60 text-text-primary"
+                  className="min-w-0 flex-1 bg-transparent text-xs outline-hidden placeholder:text-muted-foreground/60 text-text-primary disabled:cursor-not-allowed"
                 />
               </label>
               {err && <div className="mt-1 text-[11px] text-destructive">{err}</div>}
@@ -880,7 +978,7 @@ function isValidEmail(v: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 }
 
-export function validateSocials(s: Socials): Record<keyof Socials, string | null> {
+function validateSocials(s: Socials): Record<keyof Socials, string | null> {
   const errs: Record<keyof Socials, string | null> = {
     github: null,
     linkedin: null,
@@ -906,7 +1004,7 @@ export function validateSocials(s: Socials): Record<keyof Socials, string | null
   return errs;
 }
 
-export function normalizeSocials(s: Socials): Socials {
+function normalizeSocials(s: Socials): Socials {
   return {
     github: s.github.trim() ? normalizeUrl(s.github) : "",
     linkedin: s.linkedin.trim() ? normalizeUrl(s.linkedin) : "",

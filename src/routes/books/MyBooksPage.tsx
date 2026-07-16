@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Box,
   ChevronDown,
@@ -18,7 +18,7 @@ import {
   Layers,
 } from "lucide-react";
 import { CreateBookModal } from "@/components/modals/CreateBookModal";
-import { useBooks, useCreateBook } from "@/hooks/useBooks";
+import { useBooks, useBookStepCounts, useCreateBook } from "@/hooks/useBooks";
 import type { DBBook } from "@/services/db";
 
 type BookRecord = DBBook & {
@@ -36,19 +36,20 @@ type BookItem = {
   updatedDate: string;
   updatedRelative: string;
   status: "Published" | "Draft" | "Archived";
-  coverType: "workflow" | "docker" | "database" | "default";
+  coverType: string;
 };
 
-function mapDBBookToBookItem(dbBook: BookRecord, index: number): BookItem {
-  const coverTypes: BookItem["coverType"][] = ["workflow", "docker", "database"];
+function mapDBBookToBookItem(dbBook: BookRecord, stepCounts?: Record<string, number>): BookItem {
   const dateValue = dbBook.updated_at || dbBook.created_at;
+  const category = dbBook.tags?.[0] || "default";
+  const stepCount = stepCounts?.[dbBook.id] || 0;
 
   return {
     id: dbBook.id,
     title: dbBook.title,
     description: dbBook.description || "Developer guide draft",
-    phases: index % 2 === 0 ? 3 : 4,
-    steps: index % 2 === 0 ? 12 : 18,
+    phases: stepCount ? Math.ceil(stepCount / 3) : 0,
+    steps: stepCount,
     visibility:
       dbBook.access_level === "FOLLOWERS"
         ? "Followers"
@@ -71,7 +72,7 @@ function mapDBBookToBookItem(dbBook: BookRecord, index: number): BookItem {
         : dbBook.publication_status === "ARCHIVED"
           ? "Archived"
           : "Draft",
-    coverType: coverTypes[index % coverTypes.length] || "default",
+    coverType: category.toLowerCase(),
   };
 }
 
@@ -125,7 +126,12 @@ export function MyBooksPage({
   onViewBook?: (bookId: string) => void;
 } = {}) {
   const { data: dbBooks = [] } = useBooks();
-  const books = dbBooks.map(mapDBBookToBookItem);
+  const bookIds = useMemo(() => dbBooks.map((book) => book.id), [dbBooks]);
+  const { data: stepCounts } = useBookStepCounts(bookIds);
+  const books = useMemo(
+    () => dbBooks.map((book) => mapDBBookToBookItem(book, stepCounts)),
+    [dbBooks, stepCounts],
+  );
   const createBookMutation = useCreateBook();
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);

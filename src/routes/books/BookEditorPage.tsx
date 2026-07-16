@@ -1,12 +1,19 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { TopBar } from "@/components/layout/TopBar";
-import { Markdown } from "@/components/Markdown";
 import { validateMdx, summarizeDiff, type MdxIssue } from "@/lib/mdx-validate";
+import { EditorSidebar } from "@/components/editor/EditorSidebar";
+import { EditorArea } from "@/components/editor/EditorArea";
+import { PreviewArea } from "@/components/editor/PreviewArea";
 
 
-import { parseMarkdownToTree } from "@/lib/mock-data";
-import { useToast } from "@/providers/ToastProvider";
+import { parseMarkdownToTree } from "@/lib/book-utils";
+import { useToast } from "@/hooks/useToast";
+import { useAuth } from "@/hooks/useAuth";
+import { useAllProfiles } from "@/hooks/useProfile";
+import { useBookMembers, useAddBookMember, useRemoveBookMember } from "@/hooks/useCollaboration";
+import { insforge } from "@/lib/insforge";
+import { useUploadAttachment } from "@/hooks/useAttachments";
 
 import {
   useBook,
@@ -18,10 +25,9 @@ import {
   useCreateStep,
   useUpdateStep,
   useDeleteStep,
+  useDeleteBook,
 } from "@/hooks/useBooks";
 import {
-  DndContext,
-  closestCenter,
   type DragEndEvent,
   KeyboardSensor,
   PointerSensor,
@@ -29,32 +35,19 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import {
-  SortableContext,
   arrayMove,
   sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import {
-  GripVertical,
-  Plus,
-  Trash2,
   Upload,
   Eye,
   Check,
   Globe,
   BookOpen,
-  ChevronLeft,
   AlertTriangle,
   X,
   Loader2,
-  MoreVertical,
-  Lock,
-  Users,
 } from "lucide-react";
-
-const MDXEditorComponent = lazy(() => import("@/components/editor/MDXEditorComponent"));
 
 type StepNode = {
   id: string;
@@ -80,46 +73,7 @@ type Props = {
   onPreview?: () => void;
 };
 
-function SortableItem({
-  id,
-  title,
-  onDelete,
-  depth = 0,
-}: {
-  id: string;
-  title: string;
-  onDelete?: () => void;
-  depth?: number;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
-  return (
-    <div
-      ref={setNodeRef}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.5 : 1,
-        marginLeft: depth * 16,
-      }}
-      className="group flex items-center gap-2 rounded-md border border-hairline bg-surface-2 px-2 py-1.5 text-sm hover:border-foreground/20"
-    >
-      <button {...attributes} {...listeners} className="cursor-grab text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-        <GripVertical className="h-3.5 w-3.5" />
-      </button>
-      <span className={`truncate flex-1 min-w-0  ${depth === 0 ? "text-[13px] font-semibold " : ""}`}>
-        {title}
-      </span>
-      {onDelete && (
-        <button
-          onClick={onDelete}
-          className="ml-auto opacity-0 transition-opacity group-hover:opacity-100 cursor-pointer"
-        >
-          <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
-        </button>
-      )}
-    </div>
-  );
-}
+
 
 export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
   const { showToast } = useToast();
@@ -134,8 +88,19 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
   const createStepMutation = useCreateStep();
   const updateStepMutation = useUpdateStep();
   const deleteStepMutation = useDeleteStep();
+  const deleteBookMutation = useDeleteBook();
+  const uploadAttachmentMutation = useUploadAttachment();
 
-  const [tab, setTab] = useState<"editor" | "import">("editor");
+  const { user } = useAuth();
+  const { data: dbProfiles = [] } = useAllProfiles();
+  const { data: bookMembers = [] } = useBookMembers(bookId);
+  const addMemberMutation = useAddBookMember();
+  const removeMemberMutation = useRemoveBookMember();
+
+  const [collabUserId, setCollabUserId] = useState<string>("");
+  const [collabRole, setCollabRole] = useState<"OWNER" | "EDITOR" | "VIEWER">("EDITOR");
+
+  const [tab, setTab] = useState<"editor" | "collaborators" | "import">("editor");
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [editorView, setEditorView] = useState<"rich" | "raw">("rich");
   const editorRef = useRef<any>(null);
@@ -147,6 +112,36 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
   // Local state representing the tree of phases and steps
   const [phases, setPhases] = useState<PhaseNode[]>([]);
   const [activeStepRef, setActiveStepRef] = useState<{ phaseId: string; stepId: string } | null>(null);
+
+  // Decoupled states for local typing, debounced preview, and parent sync
+  const [markdown, setMarkdown] = useState("");
+  const [previewMarkdown, setPreviewMarkdown] = useState("");
+
+  // Sync local editor state when selection changes
+  useEffect(() => {
+    const activeStepFound = (() => {
+      if (!activeStepRef) return null;
+      for (const p of phases) {
+        const found = p.steps.find((s) => s.id === activeStepRef.stepId);
+        if (found) return found;
+      }
+      return null;
+    })();
+    if (activeStepFound) {
+      setMarkdown(activeStepFound.markdown);
+      setPreviewMarkdown(activeStepFound.markdown);
+    }
+  }, [activeStepRef?.stepId]);
+
+  // Debounce expensive preview updates (AST parsing, Shiki, Mermaid)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setPreviewMarkdown(markdown);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [markdown]);
+
+
 
   // Sync from DB structure
   useEffect(() => {
@@ -255,25 +250,76 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
     };
   }, [activeStep, editorView]);
 
-  // Handle markdown change in active step
-  const handleMarkdownChange = (val: string) => {
-    if (!activeStepRef) return;
-    setPhases((prev) =>
-      prev.map((p) => {
-        if (p.id === activeStepRef.phaseId) {
-          return {
-            ...p,
-            steps: p.steps.map((s) => (s.id === activeStepRef.stepId ? { ...s, markdown: val } : s)),
-          };
+  // Keep refs of active markdown & phases to avoid rebuilding callbacks on every keystroke
+  const markdownRef = useRef(markdown);
+  useEffect(() => {
+    markdownRef.current = markdown;
+  }, [markdown]);
+
+  const phasesRef = useRef(phases);
+  useEffect(() => {
+    phasesRef.current = phases;
+  }, [phases]);
+
+  // Auto-save state and refs
+  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
+  const saveTimeoutRef = useRef<any>(null);
+
+  const syncDatabase = useCallback(async () => {
+    try {
+      const activeStepFound = (() => {
+        if (!activeStepRef) return null;
+        for (const p of phasesRef.current) {
+          const found = p.steps.find((s) => s.id === activeStepRef.stepId);
+          if (found) return found;
         }
-        return p;
-      })
-    );
+        return null;
+      })();
+
+      if (activeStepFound && activeStepRef) {
+        const currentMarkdown = markdownRef.current;
+        await updateStepMutation.mutateAsync({
+          stepId: activeStepFound.id,
+          phaseId: activeStepRef.phaseId,
+          bookId,
+          updates: {
+            title: activeStepFound.title,
+            position: 1,
+            content: {
+              slug: activeStepFound.slug,
+              markdown: currentMarkdown,
+              description: activeStepFound.description,
+              status: activeStepFound.status,
+              difficulty: activeStepFound.difficulty,
+              estimatedTime: activeStepFound.estimatedTime,
+              visibility: activeStepFound.visibility,
+            },
+          },
+        });
+      }
+      setSaveStatus("saved");
+    } catch (err) {
+      console.error("Autosave failed:", err);
+      setSaveStatus("unsaved");
+    }
+  }, [activeStepRef, bookId, updateStepMutation]);
+
+  const triggerAutoSave = useCallback(() => {
+    setSaveStatus("saving");
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      syncDatabase();
+    }, 1500);
+  }, [syncDatabase]);
+
+  // Handle markdown change in active step (local state only)
+  const handleMarkdownChange = useCallback((val: string) => {
+    setMarkdown(val);
     triggerAutoSave();
-  };
+  }, [triggerAutoSave]);
 
   // Handle active step properties change
-  const handlePropertyChange = <K extends keyof StepNode>(field: K, val: StepNode[K]) => {
+  const handlePropertyChange = useCallback(<K extends keyof StepNode>(field: K, val: StepNode[K]) => {
     if (!activeStepRef) return;
     setPhases((prev) =>
       prev.map((p) => {
@@ -286,53 +332,26 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
         return p;
       })
     );
-    triggerAutoSave();
-  };
-
-  // Auto-save logic
-  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
-  const saveTimeoutRef = useRef<any>(null);
-
-  const syncDatabase = async () => {
-    try {
-      // Sync active step to DB
-      if (activeStep && activeStepRef) {
-        await updateStepMutation.mutateAsync({
-          stepId: activeStep.id,
-          phaseId: activeStepRef.phaseId,
-          updates: {
-            title: activeStep.title,
-            position: 1, // position is handled dynamically or set by index
-            content: {
-              slug: activeStep.slug,
-              markdown: activeStep.markdown,
-              description: activeStep.description,
-              status: activeStep.status,
-              difficulty: activeStep.difficulty,
-              estimatedTime: activeStep.estimatedTime,
-              visibility: activeStep.visibility,
-            },
-          },
-        });
-      }
-      setSaveStatus("saved");
-    } catch (err) {
-      console.error("Autosave failed:", err);
-      setSaveStatus("unsaved");
-    }
-  };
-
-  const triggerAutoSave = () => {
+    // Direct sync properties on 500ms delay
     setSaveStatus("saving");
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
       syncDatabase();
-    }, 1500);
-  };
+    }, 500);
+  }, [activeStepRef, syncDatabase]);
 
-  // Drag and Drop phases
+  // Clean up autosave timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Drag and Drop phases (batched reordering via Promise.all)
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
-  const onDragEnd = async (e: DragEndEvent) => {
+  const onDragEnd = useCallback(async (e: DragEndEvent) => {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
     const from = phases.findIndex((p) => p.id === active.id);
@@ -340,24 +359,25 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
     if (from !== -1 && to !== -1) {
       const reordered = arrayMove(phases, from, to);
       setPhases(reordered);
-      // Persist phase positions
       try {
-        for (let i = 0; i < reordered.length; i++) {
-          await updatePhaseMutation.mutateAsync({
-            phaseId: reordered[i].id,
-            bookId,
-            updates: { title: reordered[i].title, position: i + 1 },
-          });
-        }
+        await Promise.all(
+          reordered.map((phase, idx) =>
+            updatePhaseMutation.mutateAsync({
+              phaseId: phase.id,
+              bookId,
+              updates: { title: phase.title, position: idx + 1 },
+            })
+          )
+        );
         showToast("Phases reordered", "success");
       } catch (err) {
         showToast("Failed to save reordering", "error");
       }
     }
-  };
+  }, [phases, bookId, updatePhaseMutation, showToast]);
 
   // Add Phase
-  const addPhase = async () => {
+  const addPhase = useCallback(async () => {
     const title = `Phase ${phases.length} · Untitled`;
     try {
       await createPhaseMutation.mutateAsync({
@@ -370,10 +390,10 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
       console.error("Create phase error:", err);
       showToast(`Failed to create phase: ${err.message || err}`, "error");
     }
-  };
+  }, [phases.length, bookId, createPhaseMutation, showToast]);
 
   // Delete Phase
-  const deletePhase = async (phaseId: string) => {
+  const deletePhase = useCallback(async (phaseId: string) => {
     const p = phases.find((x) => x.id === phaseId);
     if (!p) return;
     const confirm = window.confirm(`Are you sure you want to delete "${p.title}" and all its steps?`);
@@ -385,10 +405,10 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
     } catch (err) {
       showToast("Failed to delete phase", "error");
     }
-  };
+  }, [phases, bookId, deletePhaseMutation, showToast]);
 
   // Add Step
-  const addStep = async (phaseId: string) => {
+  const addStep = useCallback(async (phaseId: string) => {
     const title = "Untitled step";
     const content = {
       slug: "untitled-step-" + Date.now(),
@@ -408,6 +428,7 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
         title,
         position,
         content,
+        bookId,
       });
       setActiveStepRef({ phaseId, stepId: created.id });
       showToast("Step created", "success");
@@ -415,15 +436,15 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
       console.error("Create step error:", err);
       showToast(`Failed to create step: ${err.message || err}`, "error");
     }
-  };
+  }, [phases, bookId, createStepMutation, showToast]);
 
   // Delete Step
-  const deleteStep = async (phaseId: string, stepId: string) => {
+  const deleteStep = useCallback(async (phaseId: string, stepId: string) => {
     const confirm = window.confirm("Are you sure you want to delete this step?");
     if (!confirm) return;
 
     try {
-      await deleteStepMutation.mutateAsync({ stepId, phaseId });
+      await deleteStepMutation.mutateAsync({ stepId, phaseId, bookId });
       if (activeStepRef?.stepId === stepId) {
         setActiveStepRef(null);
       }
@@ -431,7 +452,7 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
     } catch (err) {
       showToast("Failed to delete step", "error");
     }
-  };
+  }, [activeStepRef, bookId, deleteStepMutation, showToast]);
 
   // Import Markdown parser integration
   const [rawMd, setRawMd] = useState("");
@@ -583,23 +604,34 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
     }
   };
 
-  const handleImageFile = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (e.target?.result) {
-        const alt = file.name.replace(/\.[^.]+$/, "") || "image";
-        const isImg = file.type.startsWith("image/");
-        const markdownLink = isImg
-          ? `\n![${alt}](${e.target.result})\n`
-          : `\n[${alt}](${e.target.result})\n`;
-        insertTextAtCursor(markdownLink);
-        showToast(`Embedded ${file.name} successfully`, "success");
-      }
-    };
-    reader.onerror = () => {
-      showToast(`Failed to read ${file.name}`, "error");
-    };
-    reader.readAsDataURL(file);
+  const handleImageFile = async (file: File) => {
+    if (!activeStep || !user?.id) return;
+    try {
+      showToast(`Uploading ${file.name}...`, "info");
+      
+      const attachment = await uploadAttachmentMutation.mutateAsync({
+        stepId: activeStep.id,
+        file,
+        createdBy: user.id,
+      });
+
+      const urlResult = insforge.storage
+        .from("book-assets")
+        .getPublicUrl(attachment.storage_path);
+      const publicUrl = urlResult.data?.publicUrl || "";
+
+      const alt = file.name.replace(/\.[^.]+$/, "") || "file";
+      const isImg = file.type.startsWith("image/");
+      const markdownLink = isImg
+        ? `\n![${alt}](${publicUrl})\n`
+        : `\n[${alt}](${publicUrl})\n`;
+      
+      insertTextAtCursor(markdownLink);
+      showToast(`Uploaded and embedded ${file.name} successfully`, "success");
+    } catch (err: any) {
+      console.error(err);
+      showToast(`Failed to upload ${file.name}: ${err.message || err}`, "error");
+    }
   };
 
   const handlePaste = async (e: React.ClipboardEvent) => {
@@ -629,6 +661,24 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
 
     files.forEach(handleImageFile);
   };
+
+  const handleAddCollaborator = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!collabUserId) return;
+    try {
+      await addMemberMutation.mutateAsync({
+        bookId,
+        userId: collabUserId,
+        role: collabRole,
+      });
+      setCollabUserId("");
+      showToast("Collaborator added successfully", "success");
+    } catch (err: any) {
+      showToast(`Failed to add collaborator: ${err.message || err}`, "error");
+    }
+  };
+
+
 
   // Dropdown / Popover visibility menu
   const [menuOpen, setMenuOpen] = useState(false);
@@ -661,8 +711,8 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
     const confirm = window.confirm("Are you sure you want to delete this book? This cannot be undone.");
     if (!confirm) return;
     try {
-      // Implement delete book mutation if available
-      showToast("Book deleted", "info");
+      await deleteBookMutation.mutateAsync(bookId);
+      showToast("Book deleted successfully", "success");
       onBack();
     } catch (err) {
       showToast("Failed to delete book", "error");
@@ -791,105 +841,116 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
             </div>
           </div>
         </main>
+      ) : tab === "collaborators" ? (
+        <main className="mx-auto w-full max-w-5xl px-6 py-8 flex-1 overflow-y-auto animate-in fade-in duration-200">
+          <div className="mb-6 flex items-center justify-between border-b border-hairline pb-4">
+            <div>
+              <div className="text-xs font-mono uppercase tracking-widest text-muted-foreground font-semibold">Settings</div>
+              <h1 className="text-xl font-bold tracking-tight">Collaborators</h1>
+            </div>
+            <button
+              onClick={() => setTab("editor")}
+              className="text-xs text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+            >
+              ← Back to editor
+            </button>
+          </div>
+
+          <div className="max-w-xl mx-auto">
+            {/* Book Collaborators */}
+            <div className="rounded-xl border border-hairline bg-surface p-5">
+              <h3 className="text-sm font-semibold tracking-tight text-foreground mb-4">Book Collaborators</h3>
+              
+              {/* Add Collaborator Form */}
+              <form onSubmit={handleAddCollaborator} className="flex gap-2 mb-4">
+                <select
+                  value={collabUserId}
+                  onChange={(e) => setCollabUserId(e.target.value)}
+                  className="flex-1 bg-background border border-hairline rounded-lg px-3 py-1.5 text-xs text-text-primary focus:outline-none"
+                >
+                  <option value="">Select a developer...</option>
+                  {dbProfiles
+                    .filter(
+                      (p) =>
+                        p.id !== user?.id &&
+                        !bookMembers.some((m) => m.user_id === p.id)
+                    )
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name || p.id}
+                      </option>
+                    ))}
+                </select>
+                <select
+                  value={collabRole}
+                  onChange={(e) => setCollabRole(e.target.value as any)}
+                  className="bg-background border border-hairline rounded-lg px-2 py-1.5 text-xs text-text-primary focus:outline-none"
+                >
+                  <option value="EDITOR">Editor</option>
+                  <option value="VIEWER">Viewer</option>
+                </select>
+                <button
+                  type="submit"
+                  disabled={!collabUserId}
+                  className="rounded-lg bg-black text-white dark:bg-white dark:text-black px-3.5 py-1.5 text-xs font-medium hover:opacity-90 disabled:opacity-40 cursor-pointer"
+                >
+                  Add
+                </button>
+              </form>
+
+              {/* Collaborators List */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground border-b border-hairline pb-2 mb-2">
+                  <span>Developer</span>
+                  <span>Role</span>
+                </div>
+                {bookMembers.length === 0 ? (
+                  <p className="text-xs text-muted-foreground py-4 text-center">No additional collaborators. You are the sole creator.</p>
+                ) : (
+                  bookMembers.map((member) => (
+                    <div key={member.user_id} className="flex items-center justify-between py-1.5 text-xs">
+                      <div className="flex items-center gap-2">
+                        <img
+                          src={member.user?.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80"}
+                          alt={member.user?.name || "Member"}
+                          className="w-5 h-5 rounded-full object-cover border border-border"
+                        />
+                        <span className="font-medium text-foreground">{member.user?.name || "Developer"}</span>
+                      </div>
+                      <div className="flex items-center gap-2.5">
+                        <span className="font-mono text-[10px] uppercase bg-surface-2 border border-hairline px-1.5 py-0.5 rounded text-muted-foreground">
+                          {member.role}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeMemberMutation.mutate({ bookId, userId: member.user_id })}
+                          className="text-destructive hover:underline text-[10px] cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </main>
       ) : (
         <main className="flex-1 grid grid-cols-1 lg:grid-cols-[268.8px_minmax(0,1fr)] overflow-hidden">
-          {/* Left panel: book meta + structure */}
-          <aside className="scroll-thin w-[268.8px] shrink-0 max-h-[calc(100vh-3.5rem)] overflow-y-auto border-r border-hairline p-4 lg:sticky lg:top-14">
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                onBack();
-              }}
-              className="mb-3 inline-flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground text-left cursor-pointer"
-            >
-              <ChevronLeft className="h-3 w-3" /> Back to My Books
-            </a>
-            <div className="mb-4 flex items-start gap-2.5">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-surface-2 border border-hairline">
-                <BookOpen className="h-5 w-5 text-muted-foreground" />
-              </div>
-              <div className="min-w-0">
-                <div className="truncate text-[13.6px] font-semibold">{dbBook?.title}</div>
-                <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-[color:var(--color-accent-emerald)]/10 px-1.5 py-0.5 font-mono text-[9px] font-medium uppercase tracking-wider text-[color:var(--color-accent-emerald)]">
-                  {dbBook?.publication_status === "PUBLISHED" ? "Published" : "Draft"}
-                </span>
-                <div className="mt-1 text-[10px] text-muted-foreground">
-                  {phases.reduce((n, p) => n + p.steps.length, 0)} steps · {phases.length} phases
-                </div>
-              </div>
-            </div>
-
-            <div className="mb-3 flex items-center gap-4 border-b border-hairline">
-              <div className="-mb-px border-b-2 border-foreground px-1 py-1.5 text-xs font-medium text-foreground">
-                Content
-              </div>
-              <div className="ml-auto font-mono text-[10px] text-muted-foreground">
-                {phases.length} phases
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto">
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-                <SortableContext items={phases.map((p) => p.id)} strategy={verticalListSortingStrategy}>
-                  <div className="flex flex-col gap-1.5">
-                    {phases.map((p, phaseIdx) => (
-                      <div key={p.id} className="space-y-1">
-                        <SortableItem
-                          id={p.id}
-                          title={p.title.replace(/^Phase \d+\s*[-·—:]\s*/i, `Phase ${phaseIdx} — `)}
-                          onDelete={() => deletePhase(p.id)}
-                        />
-                        <div className="mt-0.5 flex flex-col gap-0.5 pl-3">
-                          {p.steps.map((s, si) => {
-                            const isActive = activeStepRef?.stepId === s.id;
-                            return (
-                              <div key={s.id} className="group flex items-center gap-2">
-                                <button
-                                  onClick={() => {
-                                    setActiveStepRef({ phaseId: p.id, stepId: s.id });
-                                  }}
-                                  className={`flex-1 rounded-md px-2 py-1 text-left text-xs transition-colors truncate cursor-pointer ${isActive
-                                      ? "bg-surface-2 text-foreground"
-                                      : "text-muted-foreground hover:bg-surface hover:text-foreground"
-                                    }`}
-                                >
-                                  <span className="font-mono text-[9px] leading-[16px] text-muted-foreground/70 mr-1.5">
-                                    {phaseIdx}.{si + 1}
-                                  </span>
-                                  <span className="truncate text-[12px] leading-[16px]">{s.title.replace(/^\d+\.\d+\s*/, "")}</span>
-                                </button>
-                                <button
-                                  onClick={() => deleteStep(p.id, s.id)}
-                                  className="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer p-0.5 rounded hover:bg-red-50 text-muted-foreground hover:text-destructive shrink-0"
-                                  title="Delete step"
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </button>
-                              </div>
-                            );
-                          })}
-                          <button
-                            onClick={() => addStep(p.id)}
-                            className="mt-0.5 -ml-0.7 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:bg-surface hover:text-foreground cursor-pointer text-left"
-                          >
-                            <Plus className="h-3 w-3" /> <span className="text-[13px] text-muted-foreground ">Add step</span>
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </SortableContext>
-              </DndContext>
-            </div>
-
-            <button
-              onClick={addPhase}
-              className="mt-3 inline-flex w-full h-[30.59px] items-center justify-center gap-1.5 rounded-md border border-dashed border-hairline text-sm  hover:border-foreground/30 hover:text-foreground cursor-pointer shrink-0"
-            >
-              <Plus className="h-3 w-3" /> <span className="text-[13px] text-muted-foreground">Add New Phase</span>
-            </button>
-          </aside>
+          <EditorSidebar
+            dbBook={dbBook}
+            phases={phases}
+            activeStepRef={activeStepRef}
+            setActiveStepRef={setActiveStepRef}
+            sensors={sensors}
+            onDragEnd={onDragEnd}
+            addPhase={addPhase}
+            deletePhase={deletePhase}
+            addStep={addStep}
+            deleteStep={deleteStep}
+            onBack={onBack}
+          />
 
           {/* Center: split editor + live preview */}
           {activeStep ? (
@@ -900,12 +961,38 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
                   onChange={(e) => handlePropertyChange("title", e.target.value)}
                   className="w-full bg-transparent text-lg font-semibold tracking-tight focus:outline-none"
                 />
-                <button
-                  onClick={() => setTab("import")}
-                  className="ml-3 shrink-0 whitespace-nowrap text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
-                >
-                  <Upload className="mr-1 inline h-3 w-3" /> Import Markdown
-                </button>
+                <div className="flex items-center gap-3 shrink-0 ml-3 bg-surface-2 border border-hairline p-0.5 rounded select-none">
+                  <button
+                    onClick={() => setTab("editor")}
+                    className={`px-2 py-0.5 rounded text-[10px] cursor-pointer transition-colors ${
+                      tab === "editor"
+                        ? "bg-white dark:bg-zinc-800 text-foreground shadow-xs font-semibold"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Editor
+                  </button>
+                  <button
+                    onClick={() => setTab("collaborators")}
+                    className={`px-2 py-0.5 rounded text-[10px] cursor-pointer transition-colors ${
+                      (tab as string) === "collaborators"
+                        ? "bg-white dark:bg-zinc-800 text-foreground shadow-xs font-semibold"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Collaborators
+                  </button>
+                  <button
+                    onClick={() => setTab("import")}
+                    className={`px-2 py-0.5 rounded text-[10px] cursor-pointer transition-colors ${
+                      (tab as string) === "import"
+                        ? "bg-white dark:bg-zinc-800 text-foreground shadow-xs font-semibold"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Import
+                  </button>
+                </div>
               </div>
 
               <motion.div
@@ -915,153 +1002,36 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
                 transition={{ duration: 0.18, ease: "easeOut" }}
                 className="flex min-w-0 flex-1 overflow-hidden"
               >
-                {/* Left side editor */}
-                <div
-                  ref={editorContainerRef}
+                <EditorArea
+                  editorContainerRef={editorContainerRef}
+                  editorView={editorView}
+                  setEditorView={setEditorView}
+                  editorRef={editorRef}
+                  markdown={markdown}
+                  handleMarkdownChange={handleMarkdownChange}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
                   onPaste={handlePaste}
-                  className="relative flex min-w-0 flex-1 flex-col border-r border-hairline overflow-hidden"
-                >
-                  {isDraggingFile && (
-                    <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/80 border-2 border-dashed border-primary m-2 rounded-lg pointer-events-none">
-                      <Upload className="h-10 w-10 text-primary animate-bounce mb-2" />
-                      <span className="text-sm font-semibold">Drop files here to upload</span>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between border-b border-hairline bg-surface/40 px-4 py-1.5 shrink-0 select-none">
-                    <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                      Editor
-                    </span>
-                    <div className="flex items-center gap-1.5 bg-surface-2 p-0.5 rounded border border-hairline select-none">
-                      <button
-                        onClick={() => setEditorView("rich")}
-                        className={`px-2 py-0.5 rounded text-[10px] cursor-pointer transition-colors ${
-                          editorView === "rich"
-                            ? "bg-white dark:bg-zinc-800 text-foreground shadow-xs font-semibold"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        Rich Editor
-                      </button>
-                      <button
-                        onClick={() => setEditorView("raw")}
-                        className={`px-2 py-0.5 rounded text-[10px] cursor-pointer transition-colors ${
-                          editorView === "raw"
-                            ? "bg-white dark:bg-zinc-800 text-foreground shadow-xs font-semibold"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        Raw Markdown
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex-1 min-h-0 overflow-hidden">
-                    {editorView === "rich" ? (
-                      <Suspense
-                        fallback={
-                          <div className="grid h-full place-items-center text-xs text-muted-foreground">
-                            Loading editor…
-                          </div>
-                        }
-                      >
-                        <MDXEditorComponent ref={editorRef} markdown={activeStep.markdown} onChange={handleMarkdownChange} />
-                      </Suspense>
-                    ) : (
-                      <textarea
-                        value={activeStep.markdown}
-                        onChange={(e) => handleMarkdownChange(e.target.value)}
-                        className="scroll-thin h-full w-full resize-none bg-surface p-6 font-mono text-[13px] text-foreground focus:outline-none placeholder-muted-foreground border-none leading-relaxed"
-                        placeholder="Paste or write your Markdown content here..."
-                      />
-                    )}
-                  </div>
-                </div>
+                  isDraggingFile={isDraggingFile}
+                />
 
-                {/* Right side live preview */}
-                <div
-                  ref={previewContainerRef}
-                  className="hidden min-w-0 flex-1 flex-col xl:flex overflow-hidden"
-                >
-                  <div className="relative flex items-center justify-between border-b border-hairline bg-surface/40 px-4 py-1.5 shrink-0 select-none">
-                    <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                      Preview
-                    </span>
-                    <div className="flex items-center gap-3">
-                      <span className="font-mono text-[10px] text-[color:var(--color-accent-emerald)]">
-                        ● auto-updating
-                      </span>
-                      <div ref={menuRef} className="relative">
-                        <button
-                          onClick={() => setMenuOpen((o) => !o)}
-                          aria-label="Book options"
-                          className="grid h-6 w-6 place-items-center rounded-md text-muted-foreground hover:bg-surface-2 hover:text-foreground cursor-pointer"
-                        >
-                          <MoreVertical className="h-3.5 w-3.5" />
-                        </button>
-                        {menuOpen && (
-                          <div className="absolute right-0 top-full z-40 mt-1 w-64 overflow-hidden rounded-lg border border-hairline bg-popover shadow-2xl">
-                            <div className="px-3 pt-3 pb-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                              Visibility
-                            </div>
-                            {([
-                              { v: "public", icon: Globe, label: "Public", desc: "Anyone with the link" },
-                              { v: "private", icon: Lock, label: "Private", desc: "Only you" },
-                              { v: "followers", icon: Users, label: "Followers", desc: "Only followers" },
-                            ] as const).map(({ v, icon: Icon, label, desc }) => (
-                              <button
-                                key={v}
-                                onClick={() => handleBookVisibilityChange(v)}
-                                className={`flex w-full items-start gap-2.5 px-3 py-2 text-left text-xs transition-colors hover:bg-surface-2 cursor-pointer ${(dbBook?.access_level === "PUBLIC" && v === "public") ||
-                                    (dbBook?.access_level === "PRIVATE" && v === "private") ||
-                                    (dbBook?.access_level === "FOLLOWERS" && v === "followers")
-                                    ? "bg-surface-2"
-                                    : ""
-                                  }`}
-                              >
-                                <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-1.5 text-foreground">
-                                    {label}
-                                    {((dbBook?.access_level === "PUBLIC" && v === "public") ||
-                                      (dbBook?.access_level === "PRIVATE" && v === "private") ||
-                                      (dbBook?.access_level === "FOLLOWERS" && v === "followers")) && (
-                                        <Check className="h-3 w-3 text-[color:var(--color-accent-emerald)]" />
-                                      )}
-                                  </div>
-                                  <div className="text-[10px] text-muted-foreground">{desc}</div>
-                                </div>
-                              </button>
-                            ))}
-                            <div className="border-t border-hairline">
-                              <button
-                                onClick={() => {
-                                  setMenuOpen(false);
-                                  handleBookDelete();
-                                }}
-                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-destructive hover:bg-destructive/10 cursor-pointer font-medium"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" /> Delete book
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="scroll-thin flex-1 overflow-y-auto p-8 select-text">
-                    <div className="mx-auto max-w-2xl">
-                      <Markdown>{activeStep.markdown}</Markdown>
-                    </div>
-                  </div>
-                </div>
+                <PreviewArea
+                  previewContainerRef={previewContainerRef}
+                  previewMarkdown={previewMarkdown}
+                  menuRef={menuRef}
+                  menuOpen={menuOpen}
+                  setMenuOpen={setMenuOpen}
+                  dbBook={dbBook}
+                  handleBookVisibilityChange={handleBookVisibilityChange}
+                  handleBookDelete={handleBookDelete}
+                />
               </motion.div>
 
               <div className="flex items-center gap-4 border-t border-hairline bg-surface/60 px-4 py-1.5 font-mono text-[10px] text-muted-foreground shrink-0 select-none">
-                <span>Lines {activeStep.markdown.split("\n").length}</span>
-                <span>Words {activeStep.markdown.split(/\s+/).filter(Boolean).length}</span>
-                <span>Characters {activeStep.markdown.length}</span>
+                <span>Lines {markdown.split("\n").length}</span>
+                <span>Words {markdown.split(/\s+/).filter(Boolean).length}</span>
+                <span>Characters {markdown.length}</span>
                 <span className="ml-auto flex items-center gap-1">
                   <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--color-accent-emerald)]" />
                   Auto-saved

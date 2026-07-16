@@ -7,7 +7,6 @@ type EditorModule = typeof import("@mdxeditor/editor");
 let editorModulePromise: Promise<EditorModule> | null = null;
 
 function getEditorModule() {
-  // @ts-ignore
   editorModulePromise ??= import("prismjs").then(async (prismModule) => {
     const Prism = (prismModule as any).default ?? prismModule;
     // MDXEditor's fallback code renderer reads a global Prism symbol while

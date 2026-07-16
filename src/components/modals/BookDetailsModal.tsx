@@ -1,4 +1,4 @@
-import { X, Clock, BarChart2, BookOpen, Star, Play } from "lucide-react";
+import { X, Clock, BarChart2, BookOpen, Play } from "lucide-react";
 
 export type BookData = {
   id: string;
@@ -14,8 +14,6 @@ export type BookData = {
   estimatedTime: string;
   stepsCount: number;
   coverType: string;
-  rating: number;
-  reviewsCount: number;
   tags: string[];
 };
 
@@ -26,82 +24,15 @@ type Props = {
   onStartReading: (bookId: string) => void;
 };
 
-// Simulated phase/step outlines for featured books to display inside the details view
-const simulatedOutlines: Record<string, { title: string; steps: string[] }[]> = {
-  "1": [
-    {
-      title: "Phase 1 - Initialization",
-      steps: [
-        "1.1 Introduction to Workflow Engines",
-        "1.2 Express Application Boilerplate Setup",
-        "1.3 Environment Variable Configurations"
-      ]
-    },
-    {
-      title: "Phase 2 - Database Integration",
-      steps: [
-        "2.1 Prisma Schema Modeling",
-        "2.2 PostgreSQL Connection Settings",
-        "2.3 Database Migrations and Seed Files"
-      ]
-    },
-    {
-      title: "Phase 3 - Queue Management",
-      steps: [
-        "3.1 Redis Server Installation",
-        "3.2 BullMQ Job Processor Queue Setup",
-        "3.3 Handling Failed Process Retries"
-      ]
-    }
-  ],
-  "2": [
-    {
-      title: "Phase 1 - Setup",
-      steps: [
-        "1.1 JWT Cryptographic Signatures",
-        "1.2 Custom Auth Controller Middlewares"
-      ]
-    },
-    {
-      title: "Phase 2 - Verification",
-      steps: [
-        "2.1 Token Signature Verifications",
-        "2.2 Login Request Verification Triggers"
-      ]
-    }
-  ]
-};
-
 export function BookDetailsModal({ isOpen, onClose, book, onStartReading }: Props) {
   if (!isOpen || !book) return null;
 
   const category = book.category || "Development";
   const estimatedTime = book.estimatedTime || "2.5 hours";
   const difficulty = book.difficulty || "Intermediate";
-  const stepsCount = book.stepsCount || book.steps_count || 12;
-  const rating = book.rating || 4.8;
-  const reviewsCount = book.reviewsCount || 86;
+  const stepsCount = book.stepsCount || book.steps_count || 0;
   const avatar = book.author?.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80";
-  const role = book.author?.role || "Senior Architect & Contributor";
-
-  const outline = simulatedOutlines[book.id] || [
-    {
-      title: "Phase 1 - Introduction & Setup",
-      steps: [
-        "1.1 Environment Setup",
-        "1.2 Installation Instructions",
-        "1.3 Hello World Initialization"
-      ]
-    },
-    {
-      title: "Phase 2 - Code Implementation",
-      steps: [
-        "2.1 Core Algorithm Designs",
-        "2.2 Code Structure Layouts",
-        "2.3 Unit Test Validations"
-      ]
-    }
-  ];
+  const role = book.author?.role;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center select-none">
@@ -147,12 +78,6 @@ export function BookDetailsModal({ isOpen, onClose, book, onStartReading }: Prop
               <BookOpen className="w-4 h-4 text-text-muted" />
               <span>{stepsCount} steps</span>
             </div>
-            <div className="w-px h-4 bg-border" />
-            <div className="flex items-center gap-1">
-              <Star className="w-4 h-4 text-warning fill-warning" />
-              <span className="text-text-primary font-bold">{rating}</span>
-              <span className="text-text-muted font-normal">({reviewsCount} reviews)</span>
-            </div>
           </div>
 
           {/* Description */}
@@ -170,31 +95,12 @@ export function BookDetailsModal({ isOpen, onClose, book, onStartReading }: Prop
             />
             <div className="flex flex-col min-w-0">
               <span className="text-xs font-bold text-text-primary truncate">{book.author?.name}</span>
-              <span className="text-[10px] text-text-secondary truncate">{role}</span>
+              {role && <span className="text-[10px] text-text-secondary truncate">{role}</span>}
             </div>
           </div>
 
-          {/* Outline step tree */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-bold text-text-primary uppercase tracking-wider select-none">Book Syllabus Outline</h3>
-            
-            <div className="space-y-4">
-              {outline.map((phase, idx) => (
-                <div key={idx} className="border border-border-light rounded-xl overflow-hidden bg-surface-secondary/50">
-                  <div className="bg-surface-secondary px-4 py-2 border-b border-border-light text-[11px] font-bold text-text-primary uppercase tracking-wide">
-                    {phase.title}
-                  </div>
-                  <div className="p-3 divide-y divide-border-light/40 space-y-2.5">
-                    {phase.steps.map((step, sIdx) => (
-                      <div key={sIdx} className="pt-2 flex items-center gap-2.5 text-xs text-text-secondary font-medium font-sans">
-                        <span className="w-1.5 h-1.5 rounded-full bg-primary/60 shrink-0" />
-                        <span className="truncate">{step}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div className="rounded-xl border border-border-light bg-surface-secondary/50 p-4 text-xs text-text-secondary">
+            Open the reader to view the live book structure.
           </div>
         </div>
 
@@ -216,4 +122,3 @@ export function BookDetailsModal({ isOpen, onClose, book, onStartReading }: Prop
     </div>
   );
 }
-export default BookDetailsModal;

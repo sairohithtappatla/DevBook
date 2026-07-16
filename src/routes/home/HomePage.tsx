@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useMemo, useState } from "react";
 import { BookDetailsModal } from "@/components/modals/BookDetailsModal";
 import { motion, useMotionValue, useSpring } from "framer-motion";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -11,27 +11,27 @@ import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { CategoriesWidget } from "@/components/home/CategoriesWidget";
 import { TopCreatorsWidget } from "@/components/home/TopCreatorsWidget";
 import { CreateBookCTA } from "@/components/home/CreateBookCTA";
-import { useBooks } from "@/hooks/useBooks";
+import { useBooks, useBookStepCounts } from "@/hooks/useBooks";
 
 import type { BookData as ModalBookData } from "@/components/modals/BookDetailsModal";
 
-function mapDBBookToBookData(dbBook: any): BookData {
+function mapDBBookToBookData(dbBook: any, stepCounts?: Record<string, number>): BookData {
   return {
     id: dbBook.id,
     title: dbBook.title,
     description: dbBook.description || "",
     cover_url: dbBook.cover_url || "workflow",
-    steps_count: 12,
+    steps_count: stepCounts?.[dbBook.id] || 0,
     author: {
-      name: "DevBook Creator",
-      avatar_url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80"
+      name: dbBook.creator?.name || "Unknown Author",
+      avatar_url: dbBook.creator?.avatar_url || "https://api.dicebear.com/9.x/glass/svg?seed=creator"
     },
     created_at: dbBook.created_at,
     tags: dbBook.tags
   };
 }
 
-function mapDBBookToModalBookData(dbBook: any): ModalBookData {
+function mapDBBookToModalBookData(dbBook: any, stepCounts?: Record<string, number>): ModalBookData {
   return {
     id: dbBook.id,
     title: dbBook.title,
@@ -39,15 +39,13 @@ function mapDBBookToModalBookData(dbBook: any): ModalBookData {
     coverType: dbBook.cover_url || "workflow",
     difficulty: dbBook.difficulty === "BEGINNER" ? "Beginner" : dbBook.difficulty === "INTERMEDIATE" ? "Intermediate" : "Advanced",
     estimatedTime: `${dbBook.estimated_read_time || 60} mins`,
-    stepsCount: 12,
-    rating: 4.8,
-    reviewsCount: 24,
+    stepsCount: stepCounts?.[dbBook.id] || 0,
     tags: dbBook.tags || [],
-    category: dbBook.tags?.[0] || "Backend",
+    category: dbBook.tags?.[0] || "Uncategorized",
     author: {
-      name: "DevBook Creator",
-      avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80",
-      role: "Creator"
+      name: dbBook.creator?.name || "Unknown Author",
+      avatar: dbBook.creator?.avatar_url || "https://api.dicebear.com/9.x/glass/svg?seed=creator",
+      role: ""
     }
   };
 }
@@ -160,6 +158,8 @@ export function HomePage({
   onCreateBook,
 }: HomePageProps) {
   const { data: dbBooks = [] } = useBooks();
+  const bookIds = useMemo(() => dbBooks.map((b) => b.id), [dbBooks]);
+  const { data: stepCounts } = useBookStepCounts(bookIds);
 
   const [selectedBookForDetails, setSelectedBookForDetails] = useState<ModalBookData | null>(null);
   const { searchQuery } = useSearch();
@@ -177,7 +177,9 @@ export function HomePage({
     return (book.tags || []).some(tag => tag.toLowerCase() === selectedCategory.toLowerCase());
   });
 
-  const filteredBooks = filteredDBBooks.map(mapDBBookToBookData);
+  const filteredBooks = useMemo(() => {
+    return filteredDBBooks.map((b) => mapDBBookToBookData(b, stepCounts));
+  }, [filteredDBBooks, stepCounts]);
 
   // Render sidebar widgets inline if on small screens
   const renderInlineWidgets = () => {
@@ -210,7 +212,7 @@ export function HomePage({
         action={
           <button
             onClick={onExploreBooks}
-            className="text-sm font-black text-black hover:text-primary-hover flex items-center gap-1 transition-colors cursor-pointer"
+            className="text-sm font-black text-white hover:text-white flex items-center gap-1 transition-colors cursor-pointer"
           >
             View all &rarr;
           </button>
@@ -222,7 +224,7 @@ export function HomePage({
           onBookSelect={(book) => {
             const dbBook = dbBooks.find(b => b.id === book.id);
             if (dbBook) {
-              setSelectedBookForDetails(mapDBBookToModalBookData(dbBook));
+              setSelectedBookForDetails(mapDBBookToModalBookData(dbBook, stepCounts));
             }
           }}
         />

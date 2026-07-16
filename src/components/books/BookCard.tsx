@@ -23,12 +23,12 @@ type BookCardProps = {
 };
 
 function getRelativeTimeString(dateString?: string): string {
-  if (!dateString) return "2 days ago";
+  if (!dateString) return "Recently";
   try {
     const now = new Date();
     const date = new Date(dateString);
     const diffMs = now.getTime() - date.getTime();
-    if (isNaN(diffMs)) return "2 days ago";
+    if (isNaN(diffMs)) return "Recently";
     
     const diffSeconds = Math.floor(diffMs / 1000);
     const diffMinutes = Math.floor(diffSeconds / 60);
@@ -51,7 +51,7 @@ function getRelativeTimeString(dateString?: string): string {
       return diffYears === 1 ? "1 year ago" : `${diffYears} years ago`;
     }
   } catch (e) {
-    return "2 days ago";
+    return "Recently";
   }
 }
 
@@ -59,7 +59,7 @@ export function BookCard({ book, onClick }: BookCardProps) {
   const { title, description, steps_count, author, created_at, tags } = book;
 
   const category = (tags && tags[0]) || "DEVELOPMENT";
-  const phasesCount = Math.ceil((steps_count || 12) / 3);
+  const phasesCount = steps_count ? Math.ceil(steps_count / 3) : 0;
   const relativeDate = getRelativeTimeString(created_at);
 
   return (
@@ -104,7 +104,7 @@ export function BookCard({ book, onClick }: BookCardProps) {
         ) : (
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-5 h-5 rounded-full bg-gradient-to-br from-emerald-300 to-teal-500 border border-border shrink-0" />
-            <span className="font-body text-text-primary truncate">DevBook Creator</span>
+            <span className="font-body text-text-primary truncate">Unknown Author</span>
           </div>
         )}
         <span className="text-text-secondary/50 font-normal select-none">·</span>

@@ -7,6 +7,25 @@ export interface DBUser {
   bio: string | null;
 }
 
+export interface DBAttachment {
+  id: string;
+  step_id: string;
+  file_name: string;
+  storage_path: string;
+  file_type: string;
+  file_size: number | null;
+  created_at?: string;
+  created_by?: string | null;
+}
+
+export interface DBBookMember {
+  book_id: string;
+  user_id: string;
+  role: "OWNER" | "EDITOR" | "VIEWER";
+  joined_at?: string;
+  user?: DBUser;
+}
+
 export interface DBBook {
   id: string;
   title: string;
@@ -21,7 +40,13 @@ export interface DBBook {
   created_by: string | null;
   created_at?: string;
   updated_at?: string;
+  creator?: DBUser | null;
 }
+
+type DBPhaseWithSteps = {
+  book_id: string;
+  steps?: { id: string }[] | null;
+};
 
 export interface DBPhase {
   id: string;
@@ -59,25 +84,13 @@ export const DBService = {
   },
 
   async updateProfile(userId: string, updates: Partial<Omit<DBUser, "id">>): Promise<DBUser> {
-    const existing = await this.getProfile(userId);
-    if (!existing) {
-      const { data, error } = await insforge.database
-        .from("users")
-        .insert({ id: userId, ...updates })
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
-    } else {
-      const { data, error } = await insforge.database
-        .from("users")
-        .update(updates)
-        .eq("id", userId)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
-    }
+    const { data, error } = await insforge.database
+      .from("users")
+      .upsert({ id: userId, ...updates })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
   },
 
   async getAllProfiles(): Promise<DBUser[]> {
@@ -93,100 +106,17 @@ export const DBService = {
   async getBooks(): Promise<DBBook[]> {
     const { data, error } = await insforge.database
       .from("books")
-      .select("*")
+      .select("*, creator:users!books_created_by_fkey(*)")
       .is("deleted_at", null)
       .order("created_at", { ascending: false });
     if (error) throw error;
-
-    if (!data || data.length === 0) {
-      const defaultSeedBooks = [
-        {
-          title: "Workflow Engine",
-          slug: "workflow-engine",
-          description: "Build a production ready workflow engine from scratch.",
-          cover_url: "workflow",
-          publication_status: "PUBLISHED",
-          access_level: "PUBLIC",
-          estimated_read_time: 120,
-          difficulty: "INTERMEDIATE",
-          tags: ["Backend", "Architecture"]
-        },
-        {
-          title: "Authentication System",
-          slug: "authentication-system",
-          description: "Implement JWT auth, roles, permissions & more.",
-          cover_url: "auth",
-          publication_status: "PUBLISHED",
-          access_level: "PUBLIC",
-          estimated_read_time: 90,
-          difficulty: "BEGINNER",
-          tags: ["Backend", "Security"]
-        },
-        {
-          title: "E-commerce Backend",
-          slug: "ecommerce-backend",
-          description: "A complete backend for an e-commerce platform.",
-          cover_url: "ecommerce",
-          publication_status: "PUBLISHED",
-          access_level: "PUBLIC",
-          estimated_read_time: 180,
-          difficulty: "ADVANCED",
-          tags: ["Backend", "Database"]
-        }
-      ];
-
-      const inserted: DBBook[] = [];
-      for (const b of defaultSeedBooks) {
-        const { data: bData } = await insforge.database.from("books").insert(b).select().single();
-        if (bData) {
-          inserted.push(bData);
-          const { data: pData } = await insforge.database.from("phases").insert({
-            book_id: bData.id,
-            title: "Phase 1 - Initialization",
-            position: 1
-          }).select().single();
-
-          if (pData) {
-            await insforge.database.from("steps").insert({
-              phase_id: pData.id,
-              title: "1.1 Introduction",
-              position: 1,
-              content: {
-                slug: "introduction",
-                markdown: "# Introduction\n\nWelcome to " + bData.title + ". Let's build something scalable!",
-                description: "Getting started with the project.",
-                status: "Published",
-                difficulty: "Beginner",
-                estimatedTime: 10,
-                visibility: "Public"
-              }
-            });
-            await insforge.database.from("steps").insert({
-              phase_id: pData.id,
-              title: "1.2 Setup Project",
-              position: 2,
-              content: {
-                slug: "setup",
-                markdown: "# Setup Project\n\nConfigure your environment and start coding.",
-                description: "Setting up workspace variables.",
-                status: "Published",
-                difficulty: "Beginner",
-                estimatedTime: 15,
-                visibility: "Public"
-              }
-            });
-          }
-        }
-      }
-      return inserted;
-    }
     return data || [];
   },
 
   async getBook(bookId: string): Promise<DBBook | null> {
     const { data, error } = await insforge.database
       .from("books")
-      .select("*")
+      .select("*, creator:users!books_created_by_fkey(*)")
       .eq("id", bookId)
       .is("deleted_at", null)
       .maybeSingle();
@@ -197,7 +127,7 @@ export const DBService = {
   async getBookBySlug(slug: string): Promise<DBBook | null> {
     const { data, error } = await insforge.database
       .from("books")
-      .select("*")
+      .select("*, creator:users!books_created_by_fkey(*)")
       .eq("slug", slug)
       .is("deleted_at", null)
       .maybeSingle();
@@ -236,28 +166,58 @@ export const DBService = {
     if (error) throw error;
   },
 
+  async getStepCounts(bookIds: string[]): Promise<Record<string, number>> {
+    if (bookIds.length === 0) return {};
+    const { data, error } = await insforge.database
+      .from("phases")
+      .select("book_id, steps(id)")
+      .in("book_id", bookIds);
+    if (error) throw error;
+    const counts: Record<string, number> = {};
+    for (const p of (data || []) as DBPhaseWithSteps[]) {
+      const stepCount = p.steps?.length || 0;
+      counts[p.book_id] = (counts[p.book_id] || 0) + stepCount;
+    }
+    return counts;
+  },
+
   async getBookStructure(bookId: string) {
     const phases = await this.getPhases(bookId);
-    const result = [];
-    for (const p of phases) {
-      const steps = await this.getSteps(p.id);
-      result.push({
+    if (phases.length === 0) return [];
+
+    const phaseIds = phases.map((p) => p.id);
+    const { data: allSteps, error } = await insforge.database
+      .from("steps")
+      .select("*")
+      .in("phase_id", phaseIds)
+      .order("position", { ascending: true });
+
+    if (error) throw error;
+
+    const stepsByPhase = (allSteps || []).reduce((acc: Record<string, DBStep[]>, s: DBStep) => {
+      if (!acc[s.phase_id]) acc[s.phase_id] = [];
+      acc[s.phase_id].push(s);
+      return acc;
+    }, {});
+
+    return phases.map((p) => {
+      const steps = stepsByPhase[p.id] || [];
+      return {
         id: p.id,
         title: p.title,
-        steps: steps.map(s => ({
+        steps: steps.map((s: DBStep) => ({
           id: s.id,
           title: s.title,
-          slug: s.content.slug || "",
-          markdown: s.content.markdown || "",
-          description: s.content.description || "",
-          status: s.content.status || "Draft",
-          difficulty: s.content.difficulty || "Beginner",
-          estimatedTime: s.content.estimatedTime || 10,
-          visibility: s.content.visibility || "Public"
+          slug: s.content?.slug || "",
+          markdown: s.content?.markdown || "",
+          description: s.content?.description || "",
+          status: s.content?.status || "Draft",
+          difficulty: s.content?.difficulty || "Beginner",
+          estimatedTime: s.content?.estimatedTime || 10,
+          visibility: s.content?.visibility || "Public"
         }))
-      });
-    }
-    return result;
+      };
+    });
   },
 
   // --- PHASES ---
@@ -393,5 +353,131 @@ export const DBService = {
       .single();
     if (error) throw error;
     return data;
+  },
+
+  async resetBookProgress(userId: string, bookId: string): Promise<void> {
+    const { data: phases, error: phasesError } = await insforge.database
+      .from("phases")
+      .select("id")
+      .eq("book_id", bookId);
+    if (phasesError) throw phasesError;
+
+    const phaseIds = phases?.map((p) => p.id) || [];
+    if (phaseIds.length > 0) {
+      const { data: steps, error: stepsError } = await insforge.database
+        .from("steps")
+        .select("id")
+        .in("phase_id", phaseIds);
+      if (stepsError) throw stepsError;
+
+      const stepIds = steps?.map((s) => s.id) || [];
+      if (stepIds.length > 0) {
+        const { error: spError } = await insforge.database
+          .from("step_progress")
+          .delete()
+          .eq("user_id", userId)
+          .in("step_id", stepIds);
+        if (spError) throw spError;
+      }
+    }
+
+    const { error: bpError } = await insforge.database
+      .from("book_progress")
+      .delete()
+      .eq("user_id", userId)
+      .eq("book_id", bookId);
+    if (bpError) throw bpError;
+  },
+
+  // --- FOLLOWERS & FOLLOWING ---
+  async getFollowers(userId: string): Promise<DBUser[]> {
+    const { data, error } = await insforge.database
+      .from("user_followers")
+      .select("users!user_followers_follower_id_fkey(*)")
+      .eq("following_id", userId);
+    if (error) throw error;
+    return (data || []).map((x: any) => x.users).filter(Boolean);
+  },
+
+  async getFollowing(userId: string): Promise<DBUser[]> {
+    const { data, error } = await insforge.database
+      .from("user_followers")
+      .select("users!user_followers_following_id_fkey(*)")
+      .eq("follower_id", userId);
+    if (error) throw error;
+    return (data || []).map((x: any) => x.users).filter(Boolean);
+  },
+
+  async followUser(followerId: string, followingId: string): Promise<void> {
+    const { error } = await insforge.database
+      .from("user_followers")
+      .insert({ follower_id: followerId, following_id: followingId });
+    if (error) throw error;
+  },
+
+  async unfollowUser(followerId: string, followingId: string): Promise<void> {
+    const { error } = await insforge.database
+      .from("user_followers")
+      .delete()
+      .eq("follower_id", followerId)
+      .eq("following_id", followingId);
+    if (error) throw error;
+  },
+
+  // --- ATTACHMENTS ---
+  async getAttachments(stepId: string): Promise<DBAttachment[]> {
+    const { data, error } = await insforge.database
+      .from("attachments")
+      .select("*")
+      .eq("step_id", stepId);
+    if (error) throw error;
+    return data || [];
+  },
+
+  async createAttachment(attachment: Omit<DBAttachment, "id">): Promise<DBAttachment> {
+    const { data, error } = await insforge.database
+      .from("attachments")
+      .insert(attachment)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteAttachment(attachmentId: string): Promise<void> {
+    const { error } = await insforge.database
+      .from("attachments")
+      .delete()
+      .eq("id", attachmentId);
+    if (error) throw error;
+  },
+
+  // --- BOOK COLLABORATION ---
+  async getBookMembers(bookId: string): Promise<DBBookMember[]> {
+    const { data, error } = await insforge.database
+      .from("book_members")
+      .select("*, users:user_id(*)")
+      .eq("book_id", bookId);
+    if (error) throw error;
+    return data || [];
+  },
+
+  async addBookMember(bookId: string, userId: string, role: "OWNER" | "EDITOR" | "VIEWER"): Promise<DBBookMember> {
+    const { data, error } = await insforge.database
+      .from("book_members")
+      .insert({ book_id: bookId, user_id: userId, role })
+      .select("*, users:user_id(*)")
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async removeBookMember(bookId: string, userId: string): Promise<void> {
+    const { error } = await insforge.database
+      .from("book_members")
+      .delete()
+      .eq("book_id", bookId)
+      .eq("user_id", userId);
+    if (error) throw error;
   }
 };

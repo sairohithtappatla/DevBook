@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
 import { Menu, Search, Sun, Moon } from "lucide-react";
 import { useSearch } from "@/providers/SearchProvider";
 import { useAuth } from "@/hooks/useAuth";
+import { useTheme } from "@/stores/theme";
 
 type TopNavigationProps = {
   onMenuClick: () => void;
@@ -12,26 +12,7 @@ type TopNavigationProps = {
 export function TopNavigation({ onMenuClick, showSearch = true, title }: TopNavigationProps) {
   const { searchQuery, setSearchQuery } = useSearch();
   const { user } = useAuth();
-
-  // Dark/Light theme state
-  const [theme, setTheme] = useState<"light" | "dark">(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("theme");
-      if (saved === "dark" || saved === "light") return saved;
-      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    }
-    return "light";
-  });
-
-  useEffect(() => {
-    const root = window.document.documentElement;
-    if (theme === "dark") {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
-    }
-    localStorage.setItem("theme", theme);
-  }, [theme]);
+  const [theme, , toggleTheme] = useTheme();
 
   return (
     <header className="h-16 bg-transparent flex items-center justify-between px-8 shrink-0 z-10 w-full pointer-events-none">
@@ -72,15 +53,18 @@ export function TopNavigation({ onMenuClick, showSearch = true, title }: TopNavi
         <div className="flex items-center gap-6">
           {/* Theme Toggle (Dark/Light mode) */}
           <button
-            onClick={() => setTheme((prev) => (prev === "dark" ? "light" : "dark"))}
-            className="p-2 rounded-md hover:bg-surface-secondary text-text-secondary cursor-pointer relative shrink-0"
+            onClick={toggleTheme}
+            className="p-2 rounded-md hover:bg-surface-secondary text-text-secondary cursor-pointer relative shrink-0 w-9 h-9 flex items-center justify-center overflow-hidden"
             aria-label="Toggle theme"
           >
-            {theme === "dark" ? (
-              <Sun className="w-5 h-5" />
-            ) : (
-              <Moon className="w-5 h-5" />
-            )}
+            <div className="relative w-5 h-5">
+              <Sun className={`w-5 h-5 absolute inset-0 transition-all duration-300 ease-out transform ${
+                theme === "dark" ? "rotate-0 scale-100 opacity-100" : "-rotate-90 scale-0 opacity-0"
+              }`} />
+              <Moon className={`w-5 h-5 absolute inset-0 transition-all duration-300 ease-out transform ${
+                theme === "dark" ? "rotate-90 scale-0 opacity-0" : "rotate-0 scale-100 opacity-100"
+              }`} />
+            </div>
           </button>
 
           {/* Profile Avatar (w-10 h-10) */}

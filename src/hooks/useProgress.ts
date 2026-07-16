@@ -23,8 +23,8 @@ export function useStartBookProgress() {
   return useMutation({
     mutationFn: ({ userId, bookId }: { userId: string; bookId: string }) =>
       DBService.startBookProgress(userId, bookId),
-    onSuccess: (_: any, variables: any) => {
-      queryClient.invalidateQueries({ queryKey: ["book-progress", variables.userId, variables.bookId] });
+    onSuccess: (data: any, variables: any) => {
+      queryClient.setQueryData(["book-progress", variables.userId, variables.bookId], data);
     },
   });
 }
@@ -41,8 +41,8 @@ export function useUpdateBookProgress() {
       bookId: string;
       updates: { progress_percentage: number; last_read_step_id?: string | null };
     }) => DBService.updateBookProgress(userId, bookId, updates),
-    onSuccess: (_: any, variables: any) => {
-      queryClient.invalidateQueries({ queryKey: ["book-progress", variables.userId, variables.bookId] });
+    onSuccess: (data: any, variables: any) => {
+      queryClient.setQueryData(["book-progress", variables.userId, variables.bookId], data);
     },
   });
 }
@@ -60,6 +60,26 @@ export function useUpdateStepProgress() {
       status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
     }) => DBService.updateStepProgress(userId, stepId, status),
     onSuccess: (_: any, variables: any) => {
+      queryClient.setQueryData(["step-progresses", variables.userId], (old: any) => {
+        const item = { step_id: variables.stepId, status: variables.status };
+        if (!old) return [item];
+        const exists = old.some((x: any) => x.step_id === variables.stepId);
+        if (exists) {
+          return old.map((x: any) => (x.step_id === variables.stepId ? item : x));
+        }
+        return [...old, item];
+      });
+    },
+  });
+}
+
+export function useResetBookProgress() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, bookId }: { userId: string; bookId: string }) =>
+      DBService.resetBookProgress(userId, bookId),
+    onSuccess: (_, variables) => {
+      queryClient.setQueryData(["book-progress", variables.userId, variables.bookId], null);
       queryClient.invalidateQueries({ queryKey: ["step-progresses", variables.userId] });
     },
   });

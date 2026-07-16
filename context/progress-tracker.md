@@ -16,15 +16,15 @@ Database Integration & Polish
 
 **Last Completed**
 
-Progress Sync & User Profile Workspace Integration
+Mock data detachment and DB-backed book metadata cleanup
 
 **Currently Working**
 
-Final system testing, responsive alignments, and typography consistency
+Backend Advisor issue review and remaining editor lint warnings
 
 **Next Milestone**
 
-Responsive layout adjustments and dark-theme configurations
+Apply verified database advisor fixes from the actual advisor report
 
 ---
 
@@ -36,14 +36,13 @@ Responsive layout adjustments and dark-theme configurations
 
 * [x] 01 Initialize React + Vite + TypeScript
 * [x] 02 Configure Tailwind CSS
-* [ ] 03 Install shadcn/ui
-* [ ] 04 Configure TanStack Router
-* [ ] 05 Configure TanStack Query
-* [x] 06 Configure InsForge Client
-* [x] 07 Configure Project Folder Structure
-* [x] 08 Configure Theme & Design Tokens
-* [x] 09 Configure Global Layout
-* [x] 10 Configure Protected Routes
+* [x] 03 Configure TanStack Router
+* [x] 04 Configure TanStack Query
+* [x] 05 Configure InsForge Client
+* [x] 06 Configure Project Folder Structure
+* [x] 07 Configure Theme & Design Tokens
+* [x] 08 Configure Global Layout
+* [x] 09 Configure Protected Routes
 
 ---
 
@@ -166,7 +165,7 @@ Responsive layout adjustments and dark-theme configurations
 * [ ] 67 Keyboard Shortcuts
 * [x] 68 Accessibility
 * [x] 69 Error States
-* [ ] 70 Performance Optimization
+* [x] 70 Performance Optimization
 * [x] 71 Final Testing
 * [x] 72 Production Deployment (Build Verification)
 
@@ -211,6 +210,12 @@ Example
 * Integrated browser-optimized `shiki/bundle/web` and generated unique rendering IDs for Mermaid in its execution loop to support React Strict Mode.
 * Configured Mermaid theme backgrounds to align with general theme surface variables (`var(--color-surface)`), ensuring diagrams remain fully readable in both light and dark mode contexts.
 * Created a unified `insertTextAtCursor` editor helper and attached an `onPaste` handler to support copy-pasting images/files and dropping them directly inside both Rich Editor and Raw Markdown modes.
+* Aligned the Book Reader page with the real database tables by querying `useBookStructure` and mapping the step and book properties to the mock data format (e.g., mapping `s.markdown` -> `step.content` and `tags` -> `category`) to ensure visual components remain consistent and stable.
+* Replaced the Book Reader page's global scroll listener with an `IntersectionObserver` scoped to a memoized On This Page component, keeping TOC highlight updates out of the main reader render path.
+* Memoized the shared Markdown renderer, added Shiki and Mermaid content caches, lazy-loaded markdown images, and cleared copy-button reset timers on unmount to reduce repeated reader rendering work.
+* Moved shared book parsing/navigation helpers into `src/lib/book-utils.ts`, removed live `mock-data.ts` imports from reader/editor flows, and replaced reader mock fallbacks with loading/not-found states.
+* Added creator data to book queries, batched step-count fetching, and updated home, featured, progress, profile, and my-books mappings to use DB-backed author/category/step metadata instead of fixed mock values.
+* Changed progress reset cache handling to invalidate the scoped `step-progresses` query instead of clearing every cached step-progress row for the user.
 
 ---
 

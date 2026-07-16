@@ -120,19 +120,7 @@ export function CreateBookModal({ isOpen, onClose, onCreateBook }: Props) {
             </div>
           </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-bold text-text-primary uppercase tracking-wider">Cover Style</label>
-            <select
-              value={coverType}
-              onChange={(e) => setCoverType(e.target.value)}
-              className="w-full h-9 border border-border rounded-lg px-2 text-xs font-medium bg-surface text-text-primary focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
-            >
-              <option value="workflow">Workflow Engine (Purple/Orange)</option>
-              <option value="auth">Shield Authentication (Teal/Blue)</option>
-              <option value="ecommerce">Shopping Cart (Pink/Indigo)</option>
-              <option value="aws">AWS Infrastructure (Orange/Sky)</option>
-            </select>
-          </div>
+
 
           {/* Footer CTA */}
           <div className="pt-3 border-t border-border flex justify-end gap-2.5 select-none">

@@ -1,19 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import mermaid from "mermaid";
 import { Copy, Check } from "lucide-react";
 import { codeToHtml } from "shiki/bundle/web";
+import { slugify } from "@/lib/markdown-utils";
 
-function slugify(s: string) {
-  return s
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
+const shikiHtmlCache = new Map<string, string>();
+const mermaidSvgCache = new Map<string, string>();
 
 function Mermaid({ code }: { code: string }) {
-  const [svg, setSvg] = useState<string>("");
+  const [svg, setSvg] = useState<string>(() => {
+    const initialTheme = document.documentElement.classList.contains("dark") || document.body.classList.contains("dark");
+    return mermaidSvgCache.get(getMermaidCacheKey(code, initialTheme)) ?? "";
+  });
   const [error, setError] = useState<string | null>(null);
   const [isThemeDark, setIsThemeDark] = useState(() => {
     return document.documentElement.classList.contains("dark") || document.body.classList.contains("dark");
@@ -38,6 +38,14 @@ function Mermaid({ code }: { code: string }) {
     const render = async () => {
       try {
         const cleanCode = code.trim();
+        const cacheKey = getMermaidCacheKey(cleanCode, isThemeDark);
+        const cachedSvg = mermaidSvgCache.get(cacheKey);
+        if (cachedSvg) {
+          setSvg(cachedSvg);
+          setError(null);
+          return;
+        }
+        setSvg("");
         
         mermaid.initialize({
           startOnLoad: false,
@@ -66,6 +74,7 @@ function Mermaid({ code }: { code: string }) {
 
         const uniqueId = `mermaid-${Math.random().toString(36).substring(2, 9)}`;
         const { svg: renderedSvg } = await mermaid.render(uniqueId, cleanCode);
+        mermaidSvgCache.set(cacheKey, renderedSvg);
         if (active) {
           setSvg(renderedSvg);
           setError(null);
@@ -110,6 +119,16 @@ function Mermaid({ code }: { code: string }) {
 
 function CodeHeader({ lang, code }: { lang: string; code: string }) {
   const [copied, setCopied] = useState(false);
+  const copyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyResetRef.current) {
+        clearTimeout(copyResetRef.current);
+      }
+    };
+  }, []);
+
   return (
     <div className="code-block-header">
       <span className="uppercase tracking-widest">{lang}</span>
@@ -119,7 +138,10 @@ function CodeHeader({ lang, code }: { lang: string; code: string }) {
           try {
             await navigator.clipboard.writeText(code);
             setCopied(true);
-            setTimeout(() => setCopied(false), 1400);
+            if (copyResetRef.current) {
+              clearTimeout(copyResetRef.current);
+            }
+            copyResetRef.current = setTimeout(() => setCopied(false), 1400);
           } catch {}
         }}
       >
@@ -138,12 +160,23 @@ function CodeHeader({ lang, code }: { lang: string; code: string }) {
 }
 
 function CodeBlock({ lang, code }: { lang: string; code: string }) {
-  const [highlightedHtml, setHighlightedHtml] = useState<string>("");
+  const cacheKey = getShikiCacheKey(lang, code);
+  const [highlightedHtml, setHighlightedHtml] = useState<string>(() => shikiHtmlCache.get(cacheKey) ?? "");
 
   useEffect(() => {
     let active = true;
+    const nextCacheKey = getShikiCacheKey(lang, code);
+    const cachedHtml = shikiHtmlCache.get(nextCacheKey);
+    if (cachedHtml) {
+      setHighlightedHtml(cachedHtml);
+      return () => {
+        active = false;
+      };
+    }
+    setHighlightedHtml("");
     codeToHtml(code, { lang: mapLang(lang), theme: "github-dark-dimmed" })
       .then((html) => {
+        shikiHtmlCache.set(nextCacheKey, html);
         if (active) {
           setHighlightedHtml(html);
         }
@@ -173,8 +206,43 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
   );
 }
 
-export function Markdown({ children }: { children: string }) {
+const markdownComponents = {
+  h2: ({ children, ...p }: any) => {
+    const text = String(children);
+    return (
+      <h2 id={slugify(text)} {...p}>
+        {children}
+      </h2>
+    );
+  },
+  h3: ({ children, ...p }: any) => {
+    const text = String(children);
+    return (
+      <h3 id={slugify(text)} {...p}>
+        {children}
+      </h3>
+    );
+  },
+  img: ({ alt, src, ...props }: any) => (
+    <img alt={alt ?? ""} src={src ?? ""} loading="lazy" decoding="async" {...props} />
+  ),
+  pre: ({ children }: any) => <>{children}</>,
+  code: ({ className, children, ...props }: any) => {
+    const match = /language-mermaid/.exec(className || "");
+    if (match) {
+      return <Mermaid code={String(children).trim()} />;
+    }
+    const langMatch = /language-(\w+)/.exec(className || "");
+    if (langMatch) {
+      return <CodeBlock lang={langMatch[1]} code={String(children).trim()} />;
+    }
+    return <code className={className} {...props}>{children}</code>;
+  },
+};
+
+export const Markdown = memo(function Markdown({ children }: { children: string }) {
   const ref = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!ref.current) return;
 
@@ -194,42 +262,13 @@ export function Markdown({ children }: { children: string }) {
           }
           return "";
         }}
-        components={{
-          h2: ({ children, ...p }) => {
-            const text = String(children);
-            return (
-              <h2 id={slugify(text)} {...p}>
-                {children}
-              </h2>
-            );
-          },
-          h3: ({ children, ...p }) => {
-            const text = String(children);
-            return (
-              <h3 id={slugify(text)} {...p}>
-                {children}
-              </h3>
-            );
-          },
-          pre: ({ children }) => <>{children}</>,
-          code: ({ className, children, ...props }) => {
-            const match = /language-mermaid/.exec(className || "");
-            if (match) {
-              return <Mermaid code={String(children).trim()} />;
-            }
-            const langMatch = /language-(\w+)/.exec(className || "");
-            if (langMatch) {
-              return <CodeBlock lang={langMatch[1]} code={String(children).trim()} />;
-            }
-            return <code className={className} {...props}>{children}</code>;
-          },
-        }}
+        components={markdownComponents}
       >
         {children}
       </ReactMarkdown>
     </div>
   );
-}
+});
 
 const LANG_ALIAS: Record<string, string> = {
   sh: "bash",
@@ -261,13 +300,12 @@ function mapLang(l: string): string {
   return LANG_ALIAS[l.toLowerCase()] ?? l.toLowerCase();
 }
 
-export function extractHeadings(md: string) {
-  const out: { depth: 2 | 3; text: string; id: string }[] = [];
-  for (const line of md.split(/\r?\n/)) {
-    const m2 = /^##\s+(.+)/.exec(line);
-    const m3 = /^###\s+(.+)/.exec(line);
-    if (m2) out.push({ depth: 2, text: m2[1].trim(), id: slugify(m2[1].trim()) });
-    else if (m3) out.push({ depth: 3, text: m3[1].trim(), id: slugify(m3[1].trim()) });
-  }
-  return out;
+function getShikiCacheKey(lang: string, code: string): string {
+  return `${mapLang(lang)}:${code}`;
 }
+
+function getMermaidCacheKey(code: string, isThemeDark: boolean): string {
+  return `${isThemeDark ? "dark" : "light"}:${code.trim()}`;
+}
+
+

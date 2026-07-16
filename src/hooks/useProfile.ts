@@ -14,8 +14,30 @@ export function useUpdateProfile() {
   return useMutation({
     mutationFn: ({ userId, updates }: { userId: string; updates: Partial<Omit<DBUser, "id">> }) =>
       DBService.updateProfile(userId, updates),
-    onSuccess: (_: any, variables: any) => {
-      queryClient.invalidateQueries({ queryKey: ["profile", variables.userId] });
+    onMutate: async ({ userId, updates }) => {
+      await queryClient.cancelQueries({ queryKey: ["profile", userId] });
+      const previousProfile = queryClient.getQueryData<DBUser>(["profile", userId]);
+
+      if (previousProfile) {
+        queryClient.setQueryData<DBUser>(["profile", userId], {
+          ...previousProfile,
+          ...updates,
+        });
+      }
+
+      return { previousProfile };
+    },
+    onError: (_err, variables, context: any) => {
+      if (context?.previousProfile) {
+        queryClient.setQueryData(["profile", variables.userId], context.previousProfile);
+      }
+    },
+    onSuccess: (data: any, variables: any) => {
+      queryClient.setQueryData(["profile", variables.userId], data);
+      queryClient.setQueryData(["profiles"], (old: any) => {
+        if (!old) return [data];
+        return old.map((p: any) => (p.id === variables.userId ? data : p));
+      });
     },
   });
 }

@@ -101,7 +101,7 @@ export function LoginPage() {
       setErrors((prev) => ({ ...prev, newPassword: "Passwords do not match" }));
     } else {
       setErrors((prev) => {
-        const { newPassword, ...rest } = prev;
+        const { newPassword: _newPassword, ...rest } = prev;
         return rest;
       });
     }
@@ -113,7 +113,7 @@ export function LoginPage() {
       setErrors((prev) => ({ ...prev, newPassword: "Passwords do not match" }));
     } else {
       setErrors((prev) => {
-        const { newPassword, ...rest } = prev;
+        const { newPassword: _newPassword, ...rest } = prev;
         return rest;
       });
     }
