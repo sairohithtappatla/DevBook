@@ -1,13 +1,32 @@
+/* Geist variable fonts */
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./assets/Geist-Variable.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./assets/GeistMono-Variable.woff2") format("woff2");
+}
+
 @import "tailwindcss";
 
 @theme {
   /* Fonts */
-  --font-sans: "Work Sans", sans-serif;
-  --font-heading: "JetBrains Mono", monospace;
-  --font-body: "Work Sans", sans-serif;
-  --font-sidebar: "Roboto", sans-serif;
-  --font-workspace: "Roboto", sans-serif;
-  --font-code: "JetBrains Mono", monospace;
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-heading: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-body: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sidebar: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-workspace: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-code: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --color-hairline: var(--hairline);
+  --color-accent-blue: var(--accent-blue);
 
   /* Backgrounds */
   --color-background: #F7F8FA;
@@ -88,17 +107,25 @@ input {
       rgb(0, 0, 0) 100%);
 }
 
+:root {
+  --hairline: rgba(0, 0, 0, 0.08);
+  --accent-blue: #3b82f6;
+}
+
 .dark {
-  --color-background: #0D1117;
-  --color-surface: #161B22;
-  --color-surface-secondary: #010409;
-  --color-border: #30363D;
-  --color-border-light: #21262D;
-  --color-text-primary: #C9D1D9;
-  --color-text-secondary: #8B949E;
-  --color-text-muted: #484F58;
-  --color-primary-light: #151B26;
-  --color-success-light: #0F2D19;
+  --hairline: rgba(255, 255, 255, 0.08);
+  --accent-blue: #60a5fa;
+  --color-background: #000000;
+  --color-surface: #000000;
+  --color-surface-secondary: #000000;
+  --color-sidebar: #000000;
+  --color-border: #1f1f23;
+  --color-border-light: #27272a;
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #a1a1aa;
+  --color-text-muted: #52525b;
+  --color-primary-light: #0d1527;
+  --color-success-light: #0f2d19;
 }
 
 @keyframes fadeIn {
@@ -604,6 +631,7 @@ input {
 }
 
 @media (max-width: 900px) {
+
   .my-books-page .my-books-header-row,
   .my-books-page .tabs-filters-row {
     align-items: stretch;
@@ -622,3 +650,365 @@ input {
     min-width: 820px;
   }
 }
+
+/* ============================================
+   SIDEBAR REPLICA STYLING
+   ============================================ */
+.sidebar-replica {
+  background-color: var(--color-sidebar);
+  padding: 24px 20px;
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Back Link */
+.sidebar-replica .back-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  transition: color 0.2s;
+  cursor: pointer;
+}
+
+.sidebar-replica .back-link:hover {
+  color: var(--color-text-primary);
+}
+
+/* Book Card */
+.sidebar-replica .book-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background-color: var(--color-surface-secondary);
+  padding: 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-light);
+}
+
+.sidebar-replica .book-icon {
+  width: 40px;
+  height: 40px;
+  background-color: var(--color-primary);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sidebar-replica .book-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.sidebar-replica .book-info h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: 2px;
+}
+
+.sidebar-replica .status-badge {
+  font-size: 10px;
+  font-weight: 600;
+  background-color: var(--color-border-light);
+  color: var(--color-text-secondary);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  display: inline-block;
+  margin-bottom: 2px;
+  width: fit-content;
+}
+
+.sidebar-replica .book-info p {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+/* Add New Button Wrapper */
+.sidebar-replica .add-new-wrapper {
+  display: flex;
+  gap: 8px;
+}
+
+.sidebar-replica .add-new-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background-color: var(--color-surface-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 6px 0;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.sidebar-replica .add-new-btn:hover {
+  background-color: var(--color-border-light);
+}
+
+.sidebar-replica .more-options-btn {
+  width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-surface-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--color-text-secondary);
+}
+
+/* Phase Navigation */
+.sidebar-replica .nav-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-replica .phase-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-replica .phase-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  cursor: pointer;
+}
+
+.sidebar-replica .phase-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.sidebar-replica .phase-title .chevron {
+  color: var(--color-text-muted);
+  transition: transform 0.2s;
+}
+
+.sidebar-replica .phase-header .check-icon,
+.sidebar-replica .phase-header .phase-progress {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+.sidebar-replica .phase-header .check-icon {
+  color: var(--color-success);
+}
+
+.sidebar-replica .phase-items {
+  display: none;
+  padding-left: 24px;
+  margin-top: 2px;
+}
+
+.sidebar-replica .phase-items.expanded {
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-replica .item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 0;
+  padding-left: 8px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.sidebar-replica .item:hover {
+  color: var(--color-text-primary);
+  background-color: var(--color-surface-secondary);
+}
+
+.sidebar-replica .item .check-icon {
+  color: var(--color-success);
+  font-size: 11px;
+}
+
+/* Active State */
+.sidebar-replica .item.active {
+  color: var(--color-primary);
+  background-color: var(--color-primary-light);
+  font-weight: 500;
+}
+
+.sidebar-replica .item.active .check-icon {
+  color: var(--color-primary);
+}
+
+/* Add Phase Button */
+.sidebar-replica .add-phase-wrapper {
+  margin-top: 12px;
+}
+
+.sidebar-replica .add-new-btn.full-width {
+  justify-content: flex-start;
+  padding-left: 12px;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+  border: 1px dashed var(--color-border);
+  background-color: transparent;
+}
+
+.sidebar-replica .add-new-btn.full-width:hover {
+  background-color: var(--color-surface-secondary);
+  border-color: var(--color-text-muted);
+}
+
+/* Prose styling (.prose-docs) */
+.prose-docs {
+  color: var(--color-text-primary);
+  font-size: 15px;
+  line-height: 1.75;
+  font-family: var(--font-sans);
+  letter-spacing: -0.005em;
+}
+
+.prose-docs h1 {
+  font-family: var(--font-sans);
+  font-size: 2.25rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  margin: 0 0 0.75rem;
+}
+
+.prose-docs h2 {
+  font-family: var(--font-sans);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 2.5rem 0 0.75rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--color-hairline);
+}
+
+.prose-docs h3 {
+  font-family: var(--font-sans);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 1.75rem 0 0.5rem;
+}
+
+.prose-docs p {
+  margin: 0 0 1.125rem;
+  color: color-mix(in srgb, var(--color-text-primary) 82%, transparent);
+}
+
+.prose-docs a {
+  color: var(--color-text-primary);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-text-primary) 35%, transparent);
+  text-underline-offset: 3px;
+}
+
+.prose-docs a:hover {
+  text-decoration-color: var(--color-text-primary);
+}
+
+.prose-docs code:not(pre code) {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--color-surface-secondary);
+  border: 1px solid var(--color-hairline);
+  padding: 0.1em 0.4em;
+  border-radius: 5px;
+}
+
+.prose-docs pre {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  background: var(--color-code-background);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0 0 10px 10px;
+  padding: 1rem 1.25rem;
+  overflow-x: auto;
+  margin: 0 0 1.5rem;
+  line-height: 1.65;
+  color: #e6e6e9;
+}
+
+.prose-docs ul,
+.prose-docs ol {
+  padding-left: 1.35rem;
+  margin: 0 0 1.125rem;
+  color: color-mix(in srgb, var(--color-text-primary) 82%, transparent);
+}
+
+.prose-docs li {
+  margin: 0.25rem 0;
+}
+
+.prose-docs blockquote {
+  border-left: 2px solid var(--color-text-muted);
+  padding: 0.25rem 0 0.25rem 1rem;
+  color: var(--color-text-muted);
+  margin: 1.25rem 0;
+  font-style: normal;
+}
+
+.prose-docs hr {
+  border: 0;
+  border-top: 1px solid var(--color-hairline);
+  margin: 2rem 0;
+}
+
+.prose-docs table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0 1.5rem;
+  font-size: 0.9rem;
+}
+
+.prose-docs th,
+.prose-docs td {
+  border: 1px solid var(--color-hairline);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.prose-docs th {
+  background: var(--color-surface-secondary);
+  font-family: var(--font-sans);
+  font-weight: 600;
+}
+
+.prose-docs img {
+  border-radius: 8px;
+  border: 1px solid var(--color-hairline);
+  margin: 1rem 0;
+}
+
+@utility scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-text-primary) 15%, transparent) transparent;
+}
+
+
+
+

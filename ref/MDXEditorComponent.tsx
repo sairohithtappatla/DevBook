@@ -7,21 +7,24 @@ type EditorModule = typeof import("@mdxeditor/editor");
 let editorModulePromise: Promise<EditorModule> | null = null;
 
 function getEditorModule() {
-  // @ts-ignore
   editorModulePromise ??= import("prismjs").then(async (prismModule) => {
-    const Prism = (prismModule as any).default ?? prismModule;
-    // MDXEditor's fallback code renderer reads a global Prism symbol while
+    const Prism = prismModule.default ?? prismModule;
+    // MDXEditor's fallback code renderer can read a global Prism symbol while
     // mounting. Load Prism first, then import the editor package.
-    (globalThis as any).Prism = Prism;
-    if (typeof window !== "undefined") (window as any).Prism = Prism;
+    (globalThis as typeof globalThis & { Prism?: unknown }).Prism = Prism;
+    if (typeof window !== "undefined") {
+      (window as typeof window & { Prism?: unknown }).Prism = Prism;
+    }
     return await import("@mdxeditor/editor");
   });
+
   return editorModulePromise;
 }
 
 async function uploadImage(file: File): Promise<string> {
-  // Data-URL uploader so images round-trip through markdown without a backend.
-  // Swap for a real upload endpoint (e.g. Supabase Storage) when ready.
+  // Mock uploader: encode the file as a data URL so it renders in preview
+  // and round-trips through the generated MDX. Swap for a real upload endpoint
+  // when a backend is wired up.
   return await new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
@@ -41,8 +44,8 @@ export const MDXEditorComponent = forwardRef<MDXEditorMethods, Props>(
 
     useEffect(() => {
       let cancelled = false;
-      getEditorModule().then((m) => {
-        if (!cancelled) setEditorModule(m);
+      getEditorModule().then((module) => {
+        if (!cancelled) setEditorModule(module);
       });
       return () => {
         cancelled = true;
@@ -52,12 +55,27 @@ export const MDXEditorComponent = forwardRef<MDXEditorMethods, Props>(
     const plugins = useMemo(() => {
       if (!editorModule) return null;
       const {
-        headingsPlugin, listsPlugin, quotePlugin, thematicBreakPlugin,
-        markdownShortcutPlugin, codeBlockPlugin, codeMirrorPlugin,
-        linkPlugin, linkDialogPlugin, imagePlugin, tablePlugin,
-        toolbarPlugin, UndoRedo, BoldItalicUnderlineToggles, BlockTypeSelect,
-        ListsToggle, CreateLink, InsertImage, InsertTable,
-        InsertThematicBreak, InsertCodeBlock,
+        headingsPlugin,
+        listsPlugin,
+        quotePlugin,
+        thematicBreakPlugin,
+        markdownShortcutPlugin,
+        codeBlockPlugin,
+        codeMirrorPlugin,
+        linkPlugin,
+        linkDialogPlugin,
+        imagePlugin,
+        tablePlugin,
+        toolbarPlugin,
+        UndoRedo,
+        BoldItalicUnderlineToggles,
+        BlockTypeSelect,
+        ListsToggle,
+        CreateLink,
+        InsertImage,
+        InsertTable,
+        InsertThematicBreak,
+        InsertCodeBlock,
       } = editorModule;
 
       return [
@@ -73,12 +91,25 @@ export const MDXEditorComponent = forwardRef<MDXEditorMethods, Props>(
         codeBlockPlugin({ defaultCodeBlockLanguage: "ts" }),
         codeMirrorPlugin({
           codeBlockLanguages: {
-            ts: "TypeScript", tsx: "TypeScript React",
-            js: "JavaScript", jsx: "JavaScript React",
-            bash: "Bash", sh: "Shell", json: "JSON",
-            py: "Python", sql: "SQL", rust: "Rust", go: "Go",
-            yaml: "YAML", md: "Markdown", mermaid: "Mermaid",
-            css: "CSS", html: "HTML", c: "C", cpp: "C++", text: "Plain text",
+            ts: "TypeScript",
+            tsx: "TypeScript React",
+            js: "JavaScript",
+            jsx: "JavaScript React",
+            bash: "Bash",
+            sh: "Shell",
+            json: "JSON",
+            py: "Python",
+            sql: "SQL",
+            rust: "Rust",
+            go: "Go",
+            yaml: "YAML",
+            md: "Markdown",
+            mermaid: "Mermaid",
+            css: "CSS",
+            html: "HTML",
+            c: "C",
+            cpp: "C++",
+            text: "Plain text",
           },
         }),
         toolbarPlugin({
@@ -105,7 +136,7 @@ export const MDXEditorComponent = forwardRef<MDXEditorMethods, Props>(
 
     if (!editorModule || !plugins) {
       return (
-        <div className="grid h-full min-h-[360px] w-full place-items-center text-xs text-text-muted">
+        <div className="grid h-full min-h-[360px] w-full place-items-center text-xs text-muted-foreground">
           Loading editor…
         </div>
       );

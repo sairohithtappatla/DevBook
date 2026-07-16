@@ -19,3 +19,10 @@ export function useUpdateProfile() {
     },
   });
 }
+
+export function useAllProfiles() {
+  return useQuery<DBUser[]>({
+    queryKey: ["profiles"],
+    queryFn: () => DBService.getAllProfiles(),
+  });
+}

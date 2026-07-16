@@ -19,6 +19,8 @@ export interface DBBook {
   difficulty: "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
   tags: string[];
   created_by: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface DBPhase {
@@ -76,6 +78,15 @@ export const DBService = {
       if (error) throw error;
       return data;
     }
+  },
+
+  async getAllProfiles(): Promise<DBUser[]> {
+    const { data, error } = await insforge.database
+      .from("users")
+      .select("*")
+      .order("name", { ascending: true });
+    if (error) throw error;
+    return data || [];
   },
 
   // --- BOOKS ---

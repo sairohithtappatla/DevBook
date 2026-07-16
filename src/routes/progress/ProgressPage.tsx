@@ -1,5 +1,8 @@
 import { useState, useEffect } from "react";
 import { useBooks } from "@/hooks/useBooks";
+import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/useAuth";
+import { insforge } from "@/lib/insforge";
 
 function mapDBBookToProgressBook(dbBook: any): ProgressBook {
   let stepsCompleted = 0;
@@ -33,14 +36,15 @@ function mapDBBookToProgressBook(dbBook: any): ProgressBook {
   };
 }
 import {
-  BookOpen,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  MoreHorizontal,
   ChevronDown,
   SlidersHorizontal,
-  Star
+  Box,
+  Database,
+  Layers,
+  Code2,
+  Globe
 } from "lucide-react";
 
 type ProgressBook = {
@@ -51,87 +55,117 @@ type ProgressBook = {
   stepsTotal: number;
   percentage: number;
   lastRead: string;
-  coverType: "workflow" | "auth" | "ecommerce" | "aws" | "python";
+  coverType: string;
   status: "in-progress" | "completed";
 };
 
+function BookCoverSVG({ type }: { type: string }) {
+  const key = (type || "").toLowerCase();
+  const iconClassName = "item-thumb-icon";
 
+  let icon = <Code2 className={iconClassName} />;
+  let themeClass = "item-thumb-workflow"; // dark background
 
-function BookCoverSVG({ type }: { type: ProgressBook["coverType"] }) {
-  switch (type) {
-    case "workflow":
-      return (
-        <div className="w-[64px] h-[52px] rounded-lg bg-[#2A1F45] flex items-center justify-center border border-border/10 overflow-hidden shrink-0 select-none">
-          <svg className="w-full h-full p-1.5" viewBox="0 0 100 70" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="10" y="25" width="16" height="16" rx="4" fill="#9333EA" fillOpacity="0.8" />
-            <rect x="42" y="10" width="16" height="16" rx="4" fill="#9333EA" fillOpacity="0.8" />
-            <rect x="42" y="40" width="16" height="16" rx="4" fill="#9333EA" fillOpacity="0.8" />
-            <rect x="74" y="25" width="16" height="16" rx="4" fill="#9333EA" fillOpacity="0.8" />
-            <path d="M26 33 H42" stroke="#A855F7" strokeWidth="2" strokeDasharray="3 3" />
-            <path d="M58 18 H74" stroke="#A855F7" strokeWidth="2" />
-            <path d="M58 48 H74" stroke="#A855F7" strokeWidth="2" />
-            <circle cx="18" cy="33" r="3" fill="#E9D5FF" />
-            <path d="M47 18 L53 18" stroke="#E9D5FF" strokeWidth="1.5" />
-            <path d="M50 15 L50 21" stroke="#E9D5FF" strokeWidth="1.5" />
-            <path d="M79 30 L81 33 L85 29" stroke="#E9D5FF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </div>
-      );
-    case "auth":
-      return (
-        <div className="w-[64px] h-[52px] rounded-lg bg-gradient-to-br from-[#EFF6FF] to-[#DBEAFE] flex items-center justify-center border border-blue-100 overflow-hidden shrink-0 select-none">
-          <svg className="w-6 h-6 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" fill="currentColor" fillOpacity="0.1" />
-            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-          </svg>
-        </div>
-      );
-    case "ecommerce":
-      return (
-        <div className="w-[64px] h-[52px] rounded-lg bg-gradient-to-br from-[#E8F5E9] to-[#C8E6C9] flex items-center justify-center border border-green-100 overflow-hidden shrink-0 select-none">
-          <svg className="w-6 h-6 text-[#2E7D32]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="9" cy="21" r="1" />
-            <circle cx="20" cy="21" r="1" />
-            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-          </svg>
-        </div>
-      );
-    case "aws":
-      return (
-        <div className="w-[64px] h-[52px] rounded-lg bg-gradient-to-br from-[#FFF3E0] to-[#FFE0B2] flex items-center justify-center border border-orange-100 overflow-hidden shrink-0 select-none">
-          <svg className="w-6 h-6 text-[#EF6C00]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20 17.58A5 5 0 0 0 18 8h-1.26A8 8 0 1 0 4 16.25" />
-            <line x1="8" y1="16" x2="8.01" y2="16" />
-            <line x1="8" y1="20" x2="8.01" y2="20" />
-            <line x1="12" y1="18" x2="12.01" y2="18" />
-            <line x1="16" y1="16" x2="16.01" y2="16" />
-            <line x1="16" y1="20" x2="16.01" y2="20" />
-          </svg>
-        </div>
-      );
-    case "python":
-      return (
-        <div className="w-[64px] h-[52px] rounded-lg bg-gradient-to-br from-[#FFFDE7] to-[#FFF9C4] flex items-center justify-center border border-yellow-100 overflow-hidden shrink-0 select-none">
-          {/* Custom Python-like clean icon */}
-          <svg className="w-6 h-6 text-[#EAB308]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 2A10 10 0 0 0 2 12a10 10 0 0 0 10 10 10 10 0 0 0 10-10A10 10 0 0 0 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="currentColor" fillOpacity="0.1" />
-            <path d="M12 6v12M6 12h12" />
-          </svg>
-        </div>
-      );
-    default:
-      return null;
+  if (key.includes("docker") || key.includes("devops")) {
+    icon = <Box className={iconClassName} />;
+    themeClass = "item-thumb-docker"; // blue background
+  } else if (key.includes("database") || key.includes("postgres") || key.includes("databases")) {
+    icon = <Database className={iconClassName} />;
+    themeClass = "item-thumb-database"; // yellow/orange background
+  } else if (key.includes("system") || key.includes("design")) {
+    icon = <SlidersHorizontal className={iconClassName} />;
+    themeClass = "item-thumb-docker"; // blue background
+  } else if (key.includes("api") || key.includes("globe")) {
+    icon = <Globe className={iconClassName} />;
+    themeClass = "item-thumb-database"; // yellow/orange background
+  } else if (key.includes("architecture") || key.includes("layers")) {
+    icon = <Layers className={iconClassName} />;
+    themeClass = "item-thumb-workflow"; // dark background
   }
+
+  return (
+    <div className={`item-thumb ${themeClass} select-none shrink-0`}>
+      {icon}
+    </div>
+  );
+}
+
+function getCategoryLabel(type: string): string {
+  const key = (type || "").toLowerCase();
+  if (key.includes("docker") || key.includes("devops")) return "DevOps";
+  if (key.includes("database") || key.includes("postgres") || key.includes("databases")) return "Databases";
+  if (key.includes("system design") || (key.includes("system") && key.includes("design"))) return "System Design";
+  if (key.includes("api design") || key.includes("api")) return "API Design";
+  if (key.includes("architecture")) return "Architecture";
+  if (key.includes("backend") || key.includes("python") || key.includes("django") || key.includes("node")) return "Backend";
+  return "others";
 }
 
 export function ProgressPage({ onBookSelect }: { onBookSelect?: (bookId: string) => void } = {}) {
   const { data: dbBooks = [] } = useBooks();
   const books = dbBooks.map(mapDBBookToProgressBook);
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const [resetConfirmBookId, setResetConfirmBookId] = useState<string | null>(null);
+
+  const handleResetProgress = async (bookId: string) => {
+    try {
+      localStorage.removeItem(`book-meta-progress-${bookId}`);
+      
+      if (user?.id) {
+        // Fetch phases for this book
+        const { data: phases } = await insforge.database
+          .from("phases")
+          .select("id")
+          .eq("book_id", bookId);
+        
+        const phaseIds = phases?.map((p) => p.id) || [];
+        if (phaseIds.length > 0) {
+          // Fetch steps for these phases
+          const { data: steps } = await insforge.database
+            .from("steps")
+            .select("id")
+            .in("phase_id", phaseIds);
+          
+          const stepIds = steps?.map((s) => s.id) || [];
+          if (stepIds.length > 0) {
+            // Delete step progresses in database
+            await insforge.database
+              .from("step_progress")
+              .delete()
+              .eq("user_id", user.id)
+              .in("step_id", stepIds);
+          }
+        }
+        
+        // Reset book progress percentage in database
+        await insforge.database
+          .from("book_progress")
+          .update({ progress_percentage: 0, last_read_step_id: null })
+          .eq("user_id", user.id)
+          .eq("book_id", bookId);
+          
+        queryClient.invalidateQueries({ queryKey: ["step-progresses", user.id] });
+        queryClient.invalidateQueries({ queryKey: ["book-progress", user.id, bookId] });
+      }
+      
+      queryClient.invalidateQueries({ queryKey: ["books"] });
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const [activeTab, setActiveTab] = useState<"in-progress" | "completed" | "all">("in-progress");
-  const sortBy = "Recent Activity";
+  const [sortBy, setSortBy] = useState<"recent" | "progress" | "title">("recent");
+  const [showSortDropdown, setShowSortDropdown] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 4; // Display 4 rows per page
+  const pageSize = 6; // Display 6 rows per page
+
+  const sortLabels = {
+    recent: "Recent Activity",
+    progress: "Progress (High-Low)",
+    title: "Title (A-Z)"
+  };
 
   // Filter books
   const filteredBooks = books.filter((book) => {
@@ -139,24 +173,31 @@ export function ProgressPage({ onBookSelect }: { onBookSelect?: (bookId: string)
     return book.status === activeTab;
   });
 
-  // Reset page on tab change
+  // Sort books
+  const sortedBooks = [...filteredBooks].sort((a, b) => {
+    if (sortBy === "progress") {
+      return b.percentage - a.percentage;
+    }
+    if (sortBy === "title") {
+      return a.title.localeCompare(b.title);
+    }
+    const timeA = a.lastRead === "Not started yet" ? 0 : new Date(a.lastRead).getTime() || 0;
+    const timeB = b.lastRead === "Not started yet" ? 0 : new Date(b.lastRead).getTime() || 0;
+    return timeB - timeA;
+  });
+
+  // Reset page on tab or sort change
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeTab]);
+  }, [activeTab, sortBy]);
 
-  const totalPages = Math.ceil(filteredBooks.length / pageSize);
-  const visibleBooks = filteredBooks.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const totalPages = Math.ceil(sortedBooks.length / pageSize);
+  const visibleBooks = sortedBooks.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const inProgressCount = books.filter((b) => b.status === "in-progress").length;
   const completedCount = books.filter((b) => b.status === "completed").length;
 
-  const [starredCount] = useState(() => {
-    try {
-      const saved = localStorage.getItem("starred-books");
-      if (saved) return JSON.parse(saved).length;
-    } catch {}
-    return 1; // Default fallback to 1 starred book
-  });
+
 
   return (
     <div className="page-content-container my-books-page progress-page">
@@ -169,57 +210,13 @@ export function ProgressPage({ onBookSelect }: { onBookSelect?: (bookId: string)
         </div>
       </div>
 
-      {/* Stats Cards Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 shrink-0 pb-6">
-        {/* In Progress */}
-        <div className="bg-surface border border-border rounded-xl p-4 flex items-center justify-between shadow-xs">
-          <div className="flex flex-col">
-            <span className="text-[12px] font-medium text-text-secondary">In Progress</span>
-            <div className="flex items-baseline gap-1 mt-1">
-              <span className="text-2xl font-bold font-heading text-text-primary">{inProgressCount}</span>
-              <span className="text-[12px] text-text-secondary font-medium">books</span>
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-lg bg-[#FAF5FF] dark:bg-[#2E1065] flex items-center justify-center text-[#9333EA] border border-purple-100/50 dark:border-purple-900/50">
-            <BookOpen className="w-5 h-5" />
-          </div>
-        </div>
 
-        {/* Completed */}
-        <div className="bg-surface border border-border rounded-xl p-4 flex items-center justify-between shadow-xs">
-          <div className="flex flex-col">
-            <span className="text-[12px] font-medium text-text-secondary">Completed</span>
-            <div className="flex items-baseline gap-1 mt-1">
-              <span className="text-2xl font-bold font-heading text-text-primary">{completedCount}</span>
-              <span className="text-[12px] text-text-secondary font-medium">books</span>
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-lg bg-[#F0FDF4] dark:bg-[#14532D] flex items-center justify-center text-[#16A34A] border border-green-100/50 dark:border-green-900/50">
-            <CheckCircle2 className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Starred */}
-        <div className="bg-surface border border-border rounded-xl p-4 flex items-center justify-between shadow-xs">
-          <div className="flex flex-col">
-            <span className="text-[12px] font-medium text-text-secondary">Starred</span>
-            <div className="flex items-baseline gap-1 mt-1">
-              <span className="text-2xl font-bold font-heading text-text-primary">{starredCount}</span>
-              <span className="text-[12px] text-text-secondary font-medium">books</span>
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-lg bg-[#FEF3C7] dark:bg-[#78350F] flex items-center justify-center text-[#D97706] border border-amber-100/50 dark:border-amber-900/50">
-            <Star className="w-5 h-5" />
-          </div>
-        </div>
-      </div>
 
       <div className="tabs-filters-row">
         <div className="tabs-list custom-scrollbar">
           {[
             { id: "in-progress", label: "In Progress", count: inProgressCount },
             { id: "completed", label: "Completed", count: completedCount },
-            { id: "all", label: "All Books", count: books.length }
           ].map((tab) => (
             <button
               key={tab.id}
@@ -232,11 +229,34 @@ export function ProgressPage({ onBookSelect }: { onBookSelect?: (bookId: string)
           ))}
         </div>
 
-        <div className="filters-controls">
-          <button className="filter-dropdown">
-            Sort: {sortBy}
+        <div className="filters-controls relative">
+          <button 
+            onClick={() => setShowSortDropdown(!showSortDropdown)}
+            className="filter-dropdown"
+          >
+            Sort: {sortLabels[sortBy]}
             <ChevronDown className="filter-icon" />
           </button>
+          
+          {showSortDropdown && (
+            <div className="absolute right-0 top-full mt-2 w-48 bg-surface border border-border rounded-xl shadow-md z-40 p-1">
+              {(Object.keys(sortLabels) as Array<keyof typeof sortLabels>).map((option) => (
+                <button
+                  key={option}
+                  onClick={() => {
+                    setSortBy(option);
+                    setShowSortDropdown(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 text-xs rounded-lg transition-colors ${
+                    sortBy === option ? "bg-surface-secondary text-primary font-semibold" : "text-text-secondary hover:bg-surface-secondary"
+                  }`}
+                >
+                  {sortLabels[option]}
+                </button>
+              ))}
+            </div>
+          )}
+
           <button className="filter-dropdown">
             <SlidersHorizontal className="filter-icon" />
             Filter
@@ -248,8 +268,15 @@ export function ProgressPage({ onBookSelect }: { onBookSelect?: (bookId: string)
         <table className="data-table">
           <thead>
             <tr>
-              {["Book", "Progress", "Last Read", "Steps", "Status", "Actions"].map((heading) => (
-                <th key={heading}>{heading}</th>
+              {[
+                { label: "Book", width: "25%" },
+                { label: "Author", width: "12%" },
+                { label: "Category", width: "18%" },
+                { label: "Progress", width: "15%" },
+                { label: "Status", width: "15%" },
+                { label: "Actions", width: "15%" }
+              ].map((col) => (
+                <th key={col.label} style={{ width: col.width }}>{col.label}</th>
               ))}
             </tr>
           </thead>
@@ -261,27 +288,24 @@ export function ProgressPage({ onBookSelect }: { onBookSelect?: (bookId: string)
                     <BookCoverSVG type={book.coverType} />
                     <div className="table-book-info">
                       <div className="table-book-title">{book.title}</div>
-                      <div className="table-book-desc">by {book.author}</div>
                     </div>
                   </div>
                 </td>
                 <td>
-                  <div className="flex items-center gap-3 w-full pr-4">
-                    <div className="w-full bg-[#E5E7EB] dark:bg-[#374151] rounded-full h-1.5 overflow-hidden">
-                      <div
-                        className="bg-[#16A34A] h-1.5 rounded-full"
-                        style={{ width: `${book.percentage}%` }}
-                      />
-                    </div>
-                    <span className="text-[12px] font-bold text-text-primary w-8 shrink-0">
-                      {book.percentage}%
-                    </span>
-                  </div>
+                  <span className="font-medium text-xs text-text-secondary">
+                    {book.author || "Unknown"}
+                  </span>
                 </td>
                 <td>
-                  <div className="table-date">{book.lastRead}</div>
+                  <span className="font-medium text-xs text-text-secondary">
+                    {getCategoryLabel(book.coverType)}
+                  </span>
                 </td>
-                <td className="table-steps">{book.stepsCompleted} / {book.stepsTotal}</td>
+                <td>
+                  <div className="table-steps font-medium">
+                    {book.stepsCompleted} / {book.stepsTotal} steps
+                  </div>
+                </td>
                 <td>{getStatusDot(book.status)}</td>
                 <td>
                   <div className="table-actions">
@@ -291,8 +315,11 @@ export function ProgressPage({ onBookSelect }: { onBookSelect?: (bookId: string)
                     >
                       Continue
                     </button>
-                    <button className="btn-table-action" title="More">
-                      <MoreHorizontal className="table-action-icon" />
+                    <button
+                      onClick={() => setResetConfirmBookId(book.id)}
+                      className="btn btn-secondary h-8 px-3 rounded-md text-xs font-semibold cursor-pointer border border-border hover:bg-surface-secondary text-text-secondary hover:text-danger transition-colors"
+                    >
+                      Reset
                     </button>
                   </div>
                 </td>
@@ -328,6 +355,37 @@ export function ProgressPage({ onBookSelect }: { onBookSelect?: (bookId: string)
           >
             <ChevronRight className="pag-icon" />
           </button>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {resetConfirmBookId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs">
+          <div className="bg-surface border border-border p-6 rounded-xl max-w-sm w-full mx-4 shadow-lg flex flex-col gap-4">
+            <h3 className="text-base font-semibold text-text-primary">Confirm Progress Reset</h3>
+            <p className="text-xs text-text-secondary leading-relaxed">
+              Are you sure you want to reset your progress for this book? This will reset all your steps to zero in local storage and in the database.
+            </p>
+            <div className="flex justify-end gap-3 mt-2">
+              <button
+                onClick={() => setResetConfirmBookId(null)}
+                className="btn btn-secondary px-3 py-1.5 rounded-md text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (resetConfirmBookId) {
+                    await handleResetProgress(resetConfirmBookId);
+                    setResetConfirmBookId(null);
+                  }
+                }}
+                className="btn px-3 py-1.5 rounded-md text-xs font-semibold bg-[#DC2626] hover:bg-[#B91C1C] text-white"
+              >
+                Reset Progress
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

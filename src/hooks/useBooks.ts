@@ -83,6 +83,7 @@ export function useCreatePhase() {
       DBService.createPhase(newPhase),
     onSuccess: (_: any, variables: any) => {
       queryClient.invalidateQueries({ queryKey: ["phases", variables.book_id] });
+      queryClient.invalidateQueries({ queryKey: ["book-structure"] });
     },
   });
 }
@@ -94,6 +95,7 @@ export function useUpdatePhase() {
       DBService.updatePhase(phaseId, updates),
     onSuccess: (_: any, variables: any) => {
       queryClient.invalidateQueries({ queryKey: ["phases", variables.bookId] });
+      queryClient.invalidateQueries({ queryKey: ["book-structure"] });
     },
   });
 }
@@ -105,6 +107,7 @@ export function useDeletePhase() {
       DBService.deletePhase(phaseId),
     onSuccess: (_: any, variables: any) => {
       queryClient.invalidateQueries({ queryKey: ["phases", variables.bookId] });
+      queryClient.invalidateQueries({ queryKey: ["book-structure"] });
     },
   });
 }
@@ -125,6 +128,7 @@ export function useCreateStep() {
       DBService.createStep(newStep),
     onSuccess: (_: any, variables: any) => {
       queryClient.invalidateQueries({ queryKey: ["steps", variables.phase_id] });
+      queryClient.invalidateQueries({ queryKey: ["book-structure"] });
     },
   });
 }
@@ -136,6 +140,7 @@ export function useUpdateStep() {
       DBService.updateStep(stepId, updates),
     onSuccess: (_: any, variables: any) => {
       queryClient.invalidateQueries({ queryKey: ["steps", variables.phaseId] });
+      queryClient.invalidateQueries({ queryKey: ["book-structure"] });
     },
   });
 }
@@ -147,6 +152,7 @@ export function useDeleteStep() {
       DBService.deleteStep(stepId),
     onSuccess: (_: any, variables: any) => {
       queryClient.invalidateQueries({ queryKey: ["steps", variables.phaseId] });
+      queryClient.invalidateQueries({ queryKey: ["book-structure"] });
     },
   });
 }

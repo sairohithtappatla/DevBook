@@ -190,6 +190,20 @@ Example
 * Rebuilt My Books as a middle-only content workspace with no top navigation bar: header row, tabs/filters, tokenized data table, and pagination.
 * Matched My Books typography to the reference with a single Roboto workspace font and explicit 24px/13px/12px/11px text scale.
 
+* Seeded 8 public, published books across 4 users (Sai Rohit + Alice, Bob, and Charlie) with full markdown content, code blocks, and Mermaid diagrams to allow end-to-end testing of the reader and search features.
+* Implemented dynamic pagination in the My Books workspace to show 5 books per page, resetting the current page index on active tab changes.
+* Replaced the My Books table's Steps column with a Category column showing the parsed book category. Used the same clean BookThumb styling inside a 100px height cover frame for all Home page and Featured Books cards.
+* Redesigned the My Progress table to add the Author column and Category column next to the Book column, and styled column widths to reduce column gaps.
+* Wired the Progress Reset button to prompt the user with a confirmation modal, resetting progress to zero in both localStorage and the database on confirmation.
+* Restructured category labels across both pages to map strictly to Backend, DevOps, System Design, Databases, API Design, Architecture, or others.
+* Removed the Stats Cards Row (In Progress, Completed, Starred widgets) from the My Progress page, increased items per page to 6, and adjusted column widths to minimize gaps.
+* Standardized BookThumb to use inline Tailwind solid background colors and added category-matching soft gradient backgrounds to BookCard headers to ensure high-contrast visual clarity.
+* Removed all star icon indicators and star metrics from the user Profile page books tab layout.
+* Replaced the hardcoded books tab list inside the Profile page with live database books filtered by the user ID.
+* Reordered My Books table columns to: Book, Category, Visibility, Updated, Status, Actions.
+* Redesigned the Book Editor workspace to use resizable panels, Zen Mode (Ctrl+Shift+E), Notion-style step title input, invisible toolbar, shrunk status bar, and grayscale typography-only panels.
+* Restyled the Book Reader page layout, typography, and sidebar interactions to match the Next.js docs style precisely (1400px container, 284px left sidebar, 240px right sidebar, 640px center prose max-width, 15px body text size, 3rem h1 header, and Geist variable fonts). Added matching prose styles to the editor preview pane.
+
 ---
 
 # Notes

@@ -15,6 +15,7 @@ import {
   SlidersHorizontal,
   User,
   Users,
+  Layers,
 } from "lucide-react";
 import { CreateBookModal } from "@/components/modals/CreateBookModal";
 import { useBooks, useCreateBook } from "@/hooks/useBooks";
@@ -74,30 +75,46 @@ function mapDBBookToBookItem(dbBook: BookRecord, index: number): BookItem {
   };
 }
 
-function BookThumb({ type }: { type: BookItem["coverType"] }) {
+function BookThumb({ type }: { type: string }) {
+  const key = (type || "").toLowerCase();
   const iconClassName = "item-thumb-icon";
 
-  if (type === "docker") {
-    return (
-      <div className="item-thumb item-thumb-docker">
-        <Box className={iconClassName} />
-      </div>
-    );
-  }
+  let icon = <Code2 className={iconClassName} />;
+  let themeClass = "item-thumb-workflow"; // dark background
 
-  if (type === "database") {
-    return (
-      <div className="item-thumb item-thumb-database">
-        <Database className={iconClassName} />
-      </div>
-    );
+  if (key.includes("docker") || key.includes("devops")) {
+    icon = <Box className={iconClassName} />;
+    themeClass = "item-thumb-docker"; // blue background
+  } else if (key.includes("database") || key.includes("postgres") || key.includes("databases")) {
+    icon = <Database className={iconClassName} />;
+    themeClass = "item-thumb-database"; // yellow/orange background
+  } else if (key.includes("system") || key.includes("design")) {
+    icon = <SlidersHorizontal className={iconClassName} />;
+    themeClass = "item-thumb-docker"; // blue background
+  } else if (key.includes("api") || key.includes("globe")) {
+    icon = <Globe className={iconClassName} />;
+    themeClass = "item-thumb-database"; // yellow/orange background
+  } else if (key.includes("architecture") || key.includes("layers")) {
+    icon = <Layers className={iconClassName} />;
+    themeClass = "item-thumb-workflow"; // dark background
   }
 
   return (
-    <div className="item-thumb item-thumb-workflow">
-      <Code2 className={iconClassName} />
+    <div className={`item-thumb ${themeClass}`}>
+      {icon}
     </div>
   );
+}
+
+export function getCategoryLabel(type: string): string {
+  const key = (type || "").toLowerCase();
+  if (key.includes("docker") || key.includes("devops")) return "DevOps";
+  if (key.includes("database") || key.includes("postgres") || key.includes("databases")) return "Databases";
+  if (key.includes("system design") || (key.includes("system") && key.includes("design"))) return "System Design";
+  if (key.includes("api design") || key.includes("api")) return "API Design";
+  if (key.includes("architecture")) return "Architecture";
+  if (key.includes("backend") || key.includes("python") || key.includes("django") || key.includes("node")) return "Backend";
+  return "others";
 }
 
 export function MyBooksPage({
@@ -113,6 +130,7 @@ export function MyBooksPage({
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"all" | "published" | "drafts" | "archived">("all");
+  const [currentPage, setCurrentPage] = useState(1);
   const [sortBy] = useState("Newest");
 
   const counts = {
@@ -122,12 +140,24 @@ export function MyBooksPage({
     archived: books.filter((book) => book.status === "Archived").length,
   };
 
+  const handleTabChange = (tabId: "all" | "published" | "drafts" | "archived") => {
+    setActiveTab(tabId);
+    setCurrentPage(1);
+  };
+
   const filteredBooks = books.filter((book) => {
     if (activeTab === "published") return book.status === "Published";
     if (activeTab === "drafts") return book.status === "Draft";
     if (activeTab === "archived") return book.status === "Archived";
     return true;
   });
+
+  const ITEMS_PER_PAGE = 6;
+  const totalPages = Math.max(1, Math.ceil(filteredBooks.length / ITEMS_PER_PAGE));
+  const paginatedBooks = filteredBooks.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
 
   const handleCreateBook = (newBook: {
     title: string;
@@ -185,7 +215,7 @@ export function MyBooksPage({
           {tabItems.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               className={`tab-btn ${activeTab === tab.id ? "active" : ""}`}
             >
               {tab.label}
@@ -210,13 +240,13 @@ export function MyBooksPage({
         <table className="data-table">
           <thead>
             <tr>
-              {["Book", "Visibility", "Updated", "Steps", "Status", "Actions"].map((heading) => (
+              {["Book", "Category", "Visibility", "Updated", "Status", "Actions"].map((heading) => (
                 <th key={heading}>{heading}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {filteredBooks.map((book) => (
+            {paginatedBooks.map((book) => (
               <tr key={book.id}>
                 <td>
                   <div className="table-book-cell">
@@ -230,12 +260,16 @@ export function MyBooksPage({
                     </div>
                   </div>
                 </td>
+                <td>
+                  <span className="font-medium text-xs text-text-secondary">
+                    {getCategoryLabel(book.coverType)}
+                  </span>
+                </td>
                 <td>{getVisibilityBadge(book.visibility)}</td>
                 <td>
                   <div className="table-date">{book.updatedDate}</div>
                   <div className="table-date-sub">{book.updatedRelative}</div>
                 </td>
-                <td className="table-steps">{book.steps}</td>
                 <td>{getStatusDot(book.status)}</td>
                 <td>
                   <div className="table-actions">
@@ -265,12 +299,27 @@ export function MyBooksPage({
       </div>
 
       <div className="pagination-row">
-        <button className="pag-btn">
+        <button 
+          className="pag-btn"
+          onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+          disabled={currentPage === 1}
+        >
           <ChevronLeft className="pag-icon" />
         </button>
-        <button className="pag-btn active">1</button>
-        <button className="pag-btn">2</button>
-        <button className="pag-btn">
+        {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+          <button
+            key={page}
+            onClick={() => setCurrentPage(page)}
+            className={`pag-btn ${currentPage === page ? "active" : ""}`}
+          >
+            {page}
+          </button>
+        ))}
+        <button 
+          className="pag-btn"
+          onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+          disabled={currentPage === totalPages}
+        >
           <ChevronRight className="pag-icon" />
         </button>
       </div>

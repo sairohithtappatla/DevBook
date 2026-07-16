@@ -25,7 +25,9 @@ function mapDBBookToBookData(dbBook: any): BookData {
     author: {
       name: "DevBook Creator",
       avatar_url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80"
-    }
+    },
+    created_at: dbBook.created_at,
+    tags: dbBook.tags
   };
 }
 

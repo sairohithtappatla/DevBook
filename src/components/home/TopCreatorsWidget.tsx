@@ -1,3 +1,6 @@
+import { useAllProfiles } from "@/hooks/useProfile";
+import { useBooks } from "@/hooks/useBooks";
+
 export type CreatorData = {
   id: string;
   name: string;
@@ -6,32 +9,25 @@ export type CreatorData = {
 };
 
 type TopCreatorsWidgetProps = {
-  creators?: CreatorData[];
   className?: string;
 };
 
-const defaultCreators: CreatorData[] = [
-  {
-    id: "1",
-    name: "Rohith",
-    booksCount: 12,
-    avatar_url: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&h=80&q=80",
-  },
-  {
-    id: "2",
-    name: "Ananya",
-    booksCount: 9,
-    avatar_url: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=80&h=80&q=80",
-  },
-  {
-    id: "3",
-    name: "Sai Kiran",
-    booksCount: 8,
-    avatar_url: "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=80&h=80&q=80",
-  },
-];
+export function TopCreatorsWidget({ className = "" }: TopCreatorsWidgetProps) {
+  const { data: dbProfiles = [] } = useAllProfiles();
+  const { data: dbBooks = [] } = useBooks();
 
-export function TopCreatorsWidget({ creators = defaultCreators, className = "" }: TopCreatorsWidgetProps) {
+  const creators = dbProfiles
+    .map((profile) => {
+      const count = dbBooks.filter((b) => b.created_by === profile.id).length;
+      return {
+        id: profile.id,
+        name: profile.name || "DevBook User",
+        avatar_url: profile.avatar_url || undefined,
+        booksCount: count
+      };
+    })
+    .sort((a, b) => b.booksCount - a.booksCount)
+    .slice(0, 3); // show top 3 creators
   return (
     <div className={`space-y-1 ${className}`}>
       <h3 className="font-heading text-base font-semibold text-text-primary select-none px-2">

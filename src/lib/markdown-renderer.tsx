@@ -156,7 +156,7 @@ type MarkdownRendererProps = {
 
 export function MarkdownRenderer({ markdown }: MarkdownRendererProps) {
   return (
-    <div className="markdown-body select-text">
+    <div className="prose-docs select-text">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -180,6 +180,16 @@ export function MarkdownRenderer({ markdown }: MarkdownRendererProps) {
           // Customize blockquotes
           blockquote({ children }) {
             return <CustomBlockquote>{children}</CustomBlockquote>;
+          },
+          h2({ children }) {
+            const text = React.Children.toArray(children).join("");
+            const id = text.toLowerCase().replace(/[^\w]+/g, "-").replace(/^-+|-+$/g, "");
+            return <h2 id={id} className="text-2xl font-bold tracking-tight text-text-primary mt-6 mb-2 border-t border-border-light pt-4">{children}</h2>;
+          },
+          h3({ children }) {
+            const text = React.Children.toArray(children).join("");
+            const id = text.toLowerCase().replace(/[^\w]+/g, "-").replace(/^-+|-+$/g, "");
+            return <h3 id={id} className="text-xl font-bold tracking-tight text-text-primary mt-4 mb-2">{children}</h3>;
           },
           // Style lists
           ul({ children }) {

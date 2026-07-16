@@ -89,7 +89,14 @@ function AppContent() {
   if (editingBookId) {
     return (
       <ProtectedRoute>
-        <BookEditorPage bookId={editingBookId} onBack={() => setEditingBookId(null)} />
+        <BookEditorPage
+          bookId={editingBookId}
+          onBack={() => setEditingBookId(null)}
+          onPreview={() => {
+            setReadingBookId(editingBookId);
+            setEditingBookId(null);
+          }}
+        />
       </ProtectedRoute>
     );
   }
@@ -97,7 +104,14 @@ function AppContent() {
   if (readingBookId) {
     return (
       <ProtectedRoute>
-        <BookReaderPage bookId={readingBookId} onBack={() => setReadingBookId(null)} />
+        <BookReaderPage
+          bookId={readingBookId}
+          onBack={() => setReadingBookId(null)}
+          onEdit={() => {
+            setEditingBookId(readingBookId);
+            setReadingBookId(null);
+          }}
+        />
       </ProtectedRoute>
     );
   }

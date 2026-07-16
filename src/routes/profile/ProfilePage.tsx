@@ -1,9 +1,36 @@
-import { useState, useEffect } from "react";
-import { useToast } from "@/providers/ToastProvider";
-import { MapPin, Link as LinkIcon, Calendar, Users, Eye, Pencil, Star, X, Mail, ChevronLeft, ChevronRight } from "lucide-react";
+import { useMemo, useRef, useState, useEffect } from "react";
+import {
+  Globe,
+  Mail,
+  Pencil,
+  Check,
+  X,
+  MapPin,
+  Briefcase,
+  Camera,
+} from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { useProfile, useUpdateProfile } from "@/hooks/useProfile";
+import { useBooks } from "@/hooks/useBooks";
+import { useAllProfiles } from "@/hooks/useProfile";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { BookCard, type BookData } from "@/components/books/BookCard";
 
+export type Socials = { github: string; linkedin: string; portfolio: string; email: string };
+export type ProfileData = {
+  name: string;
+  username?: string;
+  title: string;
+  location: string;
+  about: string;
+  avatar: string;
+  socials: Socials;
+  updatedAt: number;
+};
+
+const KEY = "devbook-profile-v1";
+const FOLLOW_KEY = "devbook-follows-v1";
+
+// Helper icons
 function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -23,476 +50,867 @@ function LinkedinIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-type ProfileBook = {
-  id: string;
-  title: string;
-  description: string;
-  stepsCount: number;
-  stars: number;
-  status: string;
-  coverType: "workflow" | "auth" | "ecommerce" | "aws" | "python";
-};
+const SOCIAL_FIELDS: {
+  key: keyof Socials;
+  label: string;
+  icon: any;
+  placeholder: string;
+  href: (v: string) => string;
+}[] = [
+    {
+      key: "github",
+      label: "GitHub",
+      icon: GithubIcon,
+      placeholder: "https://github.com/…",
+      href: (v) => v,
+    },
+    {
+      key: "linkedin",
+      label: "LinkedIn",
+      icon: LinkedinIcon,
+      placeholder: "https://linkedin.com/in/…",
+      href: (v) => v,
+    },
+    {
+      key: "portfolio",
+      label: "Portfolio",
+      icon: Globe,
+      placeholder: "https://your.site",
+      href: (v) => v,
+    },
+    {
+      key: "email",
+      label: "Email",
+      icon: Mail,
+      placeholder: "you@domain.com",
+      href: (v) => (v.startsWith("mailto:") ? v : `mailto:${v}`),
+    },
+  ];
 
-const mockPublishedBooks: ProfileBook[] = [
-  {
-    id: "1",
-    title: "Workflow Engine",
-    description: "Build a production ready workflow engine from scratch.",
-    stepsCount: 24,
-    stars: 128,
-    status: "Published",
-    coverType: "workflow"
-  },
-  {
-    id: "2",
-    title: "Authentication System",
-    description: "Implement JWT auth, roles, permissions & more.",
-    stepsCount: 18,
-    stars: 94,
-    status: "Published",
-    coverType: "auth"
-  },
-  {
-    id: "3",
-    title: "E-commerce Backend",
-    description: "A complete backend for an e-commerce platform.",
-    stepsCount: 31,
-    stars: 82,
-    status: "Published",
-    coverType: "ecommerce"
-  }
-];
-
-const mockFollowers = [
-  { name: "Rohith", handle: "@rohith_dev", avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80", bio: "Software Engineer @ InsForge. Love backend systems." },
-  { name: "Ananya", handle: "@ananya_codes", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=100&q=80", bio: "Tech Lead, Author. JavaScript advocate." },
-  { name: "Vamsi", handle: "@vamsi_aws", avatar: "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=100&q=80", bio: "Cloud Solutions Architect. AWS Certified." }
-];
-
-const mockFollowing = [
-  { name: "Sai Kiran", handle: "@kiran_dev", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=100&q=80", bio: "E-commerce system developer and database tutor." },
-  { name: "Meera", handle: "@meera_api", avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=100&q=80", bio: "FastAPI contributor, Python fanatic." }
-];
-
-function BookCoverSVG({ type }: { type: ProfileBook["coverType"] }) {
-  switch (type) {
-    case "workflow":
-      return (
-        <div className="w-[48px] h-[38px] rounded bg-[#2A1F45] flex items-center justify-center border border-border/10 overflow-hidden shrink-0 select-none">
-          <svg className="w-full h-full p-1" viewBox="0 0 100 70" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="10" y="25" width="16" height="16" rx="4" fill="#9333EA" fillOpacity="0.8" />
-            <rect x="42" y="10" width="16" height="16" rx="4" fill="#9333EA" fillOpacity="0.8" />
-            <rect x="42" y="40" width="16" height="16" rx="4" fill="#9333EA" fillOpacity="0.8" />
-            <rect x="74" y="25" width="16" height="16" rx="4" fill="#9333EA" fillOpacity="0.8" />
-            <path d="M26 33 H42" stroke="#A855F7" strokeWidth="2" strokeDasharray="3 3" />
-            <path d="M58 18 H74" stroke="#A855F7" strokeWidth="2" />
-            <path d="M58 48 H74" stroke="#A855F7" strokeWidth="2" />
-          </svg>
-        </div>
-      );
-    case "auth":
-      return (
-        <div className="w-[48px] h-[38px] rounded bg-gradient-to-br from-[#EFF6FF] to-[#DBEAFE] flex items-center justify-center border border-blue-100 overflow-hidden shrink-0 select-none">
-          <svg className="w-4 h-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" fill="currentColor" fillOpacity="0.1" />
-            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-          </svg>
-        </div>
-      );
-    case "ecommerce":
-      return (
-        <div className="w-[48px] h-[38px] rounded bg-gradient-to-br from-[#E8F5E9] to-[#C8E6C9] flex items-center justify-center border border-green-100 overflow-hidden shrink-0 select-none">
-          <svg className="w-4 h-4 text-[#2E7D32]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="9" cy="21" r="1" />
-            <circle cx="20" cy="21" r="1" />
-            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-          </svg>
-        </div>
-      );
-    case "aws":
-      return (
-        <div className="w-[48px] h-[38px] rounded bg-gradient-to-br from-[#FFF3E0] to-[#FFE0B2] flex items-center justify-center border border-orange-100 overflow-hidden shrink-0 select-none">
-          <svg className="w-4 h-4 text-[#EF6C00]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20 17.58A5 5 0 0 0 18 8h-1.26A8 8 0 1 0 4 16.25" />
-          </svg>
-        </div>
-      );
-    case "python":
-      return (
-        <div className="w-[48px] h-[38px] rounded bg-gradient-to-br from-[#FFFDE7] to-[#FFF9C4] flex items-center justify-center border border-yellow-100 overflow-hidden shrink-0 select-none">
-          <svg className="w-4 h-4 text-[#EAB308]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 2A10 10 0 0 0 2 12a10 10 0 0 0 10 10 10 10 0 0 0 10-10A10 10 0 0 0 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="currentColor" fillOpacity="0.1" />
-          </svg>
-        </div>
-      );
-    default:
-      return null;
-  }
+function mapDBBookToBookData(dbBook: any): BookData {
+  return {
+    id: dbBook.id,
+    title: dbBook.title,
+    description: dbBook.description || "",
+    cover_url: dbBook.cover_url || "workflow",
+    steps_count: 12,
+    author: {
+      name: "DevBook Creator",
+      avatar_url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80"
+    },
+    created_at: dbBook.created_at,
+    tags: dbBook.tags
+  };
 }
 
 export function ProfilePage() {
   const { user } = useAuth();
-  const { data: dbProfile } = useProfile(user?.id);
-  const updateProfileMutation = useUpdateProfile();
+  const { data: dbBooks = [] } = useBooks();
+  const { data: dbProfiles = [] } = useAllProfiles();
 
-  const { showToast } = useToast();
-  const [activeTab, setActiveTab] = useState<"books" | "followers" | "following">("books");
-  const [isEditOpen, setIsEditOpen] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 4; // paginating 2 items per page to show pagination
+  const [activeUsername, setActiveUsername] = useState<string>("me");
 
-  // Reset page when tab changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [activeTab]);
-
-  const getTabItems = () => {
-    if (activeTab === "books") return mockPublishedBooks;
-    if (activeTab === "followers") return mockFollowers;
-    if (activeTab === "following") return mockFollowing;
-    return [];
-  };
-
-  const currentItems = getTabItems();
-  const totalPages = Math.ceil(currentItems.length / pageSize);
-  const visibleItems = currentItems.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-
-  const [profile, setProfile] = useState({
-    name: "Rohith Tappatla",
-    username: "@rohith",
-    bio: "Full Stack Engineer building developer education tools. Passionate about design systems, React, and system architecture. Curating the best AI roadmaps on DevBook.",
-    location: "Hyderabad, India",
-    website: "rohith.dev",
-    followers: 128,
-    following: 94,
-    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80"
+  // Load and sync localStorage state
+  const [me, setMe] = useState<ProfileData>(() => {
+    const fallback: ProfileData = {
+      name: user?.profile?.name || "You",
+      username: "you",
+      title: "Backend engineer",
+      location: "Remote",
+      about: "Backend engineer, learning by shipping. Building agents, backends, and the occasional side project.",
+      avatar: user?.profile?.avatar_url || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80",
+      socials: { github: "https://github.com/you", linkedin: "https://linkedin.com/in/you", portfolio: "https://you.dev", email: "you@devbook.dev" },
+      updatedAt: Date.now(),
+    };
+    if (typeof window === "undefined") return fallback;
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (!raw) return fallback;
+      const parsed = JSON.parse(raw) as Partial<ProfileData>;
+      return {
+        name: parsed.name ?? fallback.name,
+        username: parsed.username ?? fallback.username,
+        title: parsed.title ?? fallback.title,
+        location: parsed.location ?? fallback.location,
+        about: parsed.about ?? fallback.about,
+        avatar: parsed.avatar ?? fallback.avatar,
+        socials: { ...fallback.socials, ...(parsed.socials ?? {}) },
+        updatedAt: parsed.updatedAt ?? fallback.updatedAt,
+      };
+    } catch {
+      return fallback;
+    }
   });
 
-  const [formState, setFormState] = useState({ ...profile });
-
-  useEffect(() => {
-    if (dbProfile) {
-      const updated = {
-        name: dbProfile.name || user?.profile?.name || "DevBook User",
-        username: `@${user?.email?.split("@")[0] || "user"}`,
-        bio: dbProfile.bio || "No bio yet. Edit profile to add one!",
-        location: "Hyderabad, India",
-        website: "devbook.app",
-        followers: 128,
-        following: 94,
-        avatar: dbProfile.avatar_url || user?.profile?.avatar_url || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80"
-      };
-      setProfile(updated);
-      setFormState(updated);
-    }
-  }, [dbProfile, user]);
-
-  const handleSaveProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
+  const [following, setFollowing] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
     try {
-      await updateProfileMutation.mutateAsync({
-        userId: user.id,
-        updates: {
-          name: formState.name,
-          bio: formState.bio,
-          avatar_url: formState.avatar
-        }
-      });
-      setProfile(formState);
-      setIsEditOpen(false);
-      showToast("Profile updated successfully", "success");
-    } catch (err) {
-      console.error(err);
-      showToast("Error updating profile", "error");
+      const raw = localStorage.getItem(FOLLOW_KEY);
+      if (!raw) return [];
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr.filter((x) => typeof x === "string") : [];
+    } catch {
+      return [];
     }
+  });
+
+  const updateMe = (patch: Partial<ProfileData>) => {
+    const updated = {
+      ...me,
+      ...patch,
+      socials: { ...me.socials, ...(patch.socials ?? {}) },
+      updatedAt: Date.now(),
+    };
+    setMe(updated);
+    try {
+      localStorage.setItem(KEY, JSON.stringify(updated));
+    } catch { }
   };
 
+  const toggleFollow = (username: string) => {
+    const has = following.includes(username);
+    const updated = has ? following.filter((u) => u !== username) : [...following, username];
+    setFollowing(updated);
+    try {
+      localStorage.setItem(FOLLOW_KEY, JSON.stringify(updated));
+    } catch { }
+  };
+
+  // Derive followers and following from dbProfiles
+  const otherUsers = useMemo(() => {
+    return dbProfiles
+      .filter((p) => p.id !== user?.id)
+      .map((p) => {
+        const username = (p.name || "user").toLowerCase().replace(/\s+/g, "_");
+        return {
+          id: p.id,
+          username,
+          name: p.name || "DevBook Creator",
+          avatar: p.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80",
+          about: p.bio || "Full Stack Engineer building projects.",
+          bio: p.bio || "Full Stack Engineer building projects.",
+          title: "Developer",
+          location: "Remote",
+          socials: {
+            github: `https://github.com/${username}`,
+            linkedin: `https://linkedin.com/in/${username}`,
+            portfolio: "",
+            email: "",
+          },
+        };
+      });
+  }, [dbProfiles, user?.id]);
+
+  // Determine current active profile to view
+  const currentProfile = useMemo(() => {
+    if (activeUsername === "me") {
+      return {
+        id: user?.id || "me",
+        username: me.username || "you",
+        name: me.name,
+        avatar: me.avatar,
+        about: me.about,
+        title: me.title,
+        location: me.location,
+        socials: me.socials,
+        editable: true,
+      };
+    }
+    const found = otherUsers.find((u) => u.username === activeUsername);
+    if (found) {
+      return {
+        id: found.id,
+        username: found.username,
+        name: found.name,
+        avatar: found.avatar,
+        about: found.about,
+        title: found.title,
+        location: found.location,
+        socials: found.socials,
+        editable: false,
+      };
+    }
+    return {
+      id: "unknown",
+      username: "unknown",
+      name: "Unknown Creator",
+      avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80",
+      about: "No bio details available.",
+      title: "Creator",
+      location: "Earth",
+      socials: { github: "", linkedin: "", portfolio: "", email: "" },
+      editable: false,
+    };
+  }, [activeUsername, me, otherUsers, user?.id]);
+
+  // Published count
+  const publishedCount = useMemo(() => {
+    return dbBooks.filter((b) => b.created_by === currentProfile.id).length;
+  }, [dbBooks, currentProfile.id]);
+
+  // Followers list for target profile
+  const followersList = useMemo(() => {
+    if (activeUsername === "me") return otherUsers;
+    return otherUsers.filter((p) => p.username !== activeUsername).slice(0, 3);
+  }, [otherUsers, activeUsername]);
+
+  // Following list for target profile
+  const followingList = useMemo(() => {
+    if (activeUsername === "me") {
+      return otherUsers.filter((p) => following.includes(p.username));
+    }
+    return otherUsers.filter((p) => p.username !== activeUsername).slice(1, 4);
+  }, [otherUsers, following, activeUsername]);
+
+  const userBooks = useMemo(() => {
+    return dbBooks
+      .filter((b) => b.created_by === currentProfile.id)
+      .map(mapDBBookToBookData);
+  }, [dbBooks, currentProfile.id]);
+
   return (
-    <div className="page-content-container my-books-page profile-page select-none">
-      <div className="space-y-3">
-        {/* 1. Header Profile Banner Card */}
-        <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-xs relative -mt-6 md:-mt-8">
-          {/* Decorative Cover */}
-          <div className="h-16 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 relative overflow-hidden">
-            <div className="absolute inset-0 opacity-15" style={{
-              backgroundImage: "radial-gradient(circle, #fff 10%, transparent 11%)",
-              backgroundSize: "20px 20px"
-            }} />
-          </div>
-
-          {/* Profile Details Container */}
-          <div className="px-4 pb-4 pt-2 relative flex flex-col md:flex-row md:items-end justify-between gap-4">
-            {/* Avatar overlapping cover */}
-            <div className="flex items-start gap-4">
-              <div className="w-14 h-14 rounded-full border-2 border-surface -mt-6 overflow-hidden shrink-0 shadow-sm relative bg-surface select-none">
-                <img
-                  src={profile.avatar}
-                  alt="Profile"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-
-              <div className="flex flex-col gap-0.5 mt-2">
-                <h2 className="font-heading text-lg font-bold text-text-primary leading-tight">{profile.name}</h2>
-                <span className="text-xs text-text-secondary">{profile.username}</span>
-              </div>
-            </div>
-
-            {/* Action buttons */}
-            <div className="flex gap-2 shrink-0 md:mb-1">
-              <button
-                onClick={() => {
-                  setFormState({ ...profile });
-                  setIsEditOpen(true);
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg bg-surface hover:bg-surface-secondary text-xs font-semibold text-text-primary cursor-pointer transition-all"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-                <span>Edit Profile</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Bio & Metadata Section */}
-          <div className="px-4 pb-4 border-t border-border/40 pt-3 bg-[#FAFAFA]/40 dark:bg-transparent flex flex-col md:flex-row justify-between gap-6">
-            <div className="space-y-3.5 flex-1 min-w-0">
-              <p className="text-[13px] text-text-secondary max-w-2xl font-body leading-relaxed select-text">
-                {profile.bio}
-              </p>
-
-              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[11px] text-text-secondary">
-                <div className="flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-text-muted" />
-                  <span>{profile.location}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-text-muted" />
-                  <span>Joined May 2025</span>
-                </div>
-                <div className="flex items-center gap-1.5 font-semibold text-text-primary">
-                  <Users className="w-3.5 h-3.5 text-text-muted" />
-                  <span>{profile.followers} Followers</span>
-                  <span className="text-text-muted font-normal">•</span>
-                  <span>{profile.following} Following</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Links Section beside bio */}
-            <div className="flex flex-wrap md:flex-col items-start gap-x-4 gap-y-2 shrink-0 md:border-l md:border-border/40 md:pl-6 min-w-[200px]">
-              <a href="https://github.com" target="_blank" rel="noreferrer" className="flex items-center gap-2 text-[11.5px] text-text-secondary hover:text-text-primary transition-colors">
-                <GithubIcon className="w-4 h-4 text-text-muted" />
-                <span>@rohith</span>
-              </a>
-              <a href="https://linkedin.com" target="_blank" rel="noreferrer" className="flex items-center gap-2 text-[11.5px] text-text-secondary hover:text-text-primary transition-colors">
-                <LinkedinIcon className="w-4 h-4 text-text-muted" />
-                <span>/in/rohith</span>
-              </a>
-              <a href={`https://${profile.website}`} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-[11.5px] text-text-secondary hover:text-primary transition-colors">
-                <LinkIcon className="w-4 h-4 text-text-muted" />
-                <span>{profile.website}</span>
-              </a>
-              <a href="mailto:rohith@devbook.com" className="flex items-center gap-2 text-[11.5px] text-text-secondary hover:text-text-primary transition-colors">
-                <Mail className="w-4 h-4 text-text-muted" />
-                <span>rohith@devbook.com</span>
-              </a>
-            </div>
-          </div>
-        </div>
-
-        {/* 2. Sub-Tab Selector Navigation */}
-        <div className="tabs-filters-row">
-          <div className="tabs-list custom-scrollbar">
-            {[
-              { id: "books", label: "Published Books", count: mockPublishedBooks.length },
-              { id: "followers", label: "Followers", count: profile.followers },
-              { id: "following", label: "Following", count: profile.following }
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`tab-btn ${activeTab === tab.id ? "active" : ""}`}
-              >
-                {tab.label}
-                <span className="tab-count">({tab.count})</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* 3. Tab Contents */}
-        <div className="space-y-3">
-          {activeTab === "books" && (
-            visibleItems.map((book: any) => (
-              <div
-                key={book.id}
-                className="bg-surface border border-border rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm hover:shadow-xs transition-shadow duration-150"
-              >
-                <div className="flex items-center gap-4 min-w-0 flex-1">
-                  <BookCoverSVG type={book.coverType} />
-                  <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-                    <h3 className="font-heading text-[14px] font-bold text-text-primary truncate">
-                      {book.title}
-                    </h3>
-                    <p className="text-[12px] text-text-secondary truncate">
-                      {book.description}
-                    </p>
-                    <span className="text-[10px] text-text-muted mt-0.5">
-                      {book.stepsCount} Steps
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-4 shrink-0 border-t md:border-t-0 pt-3 md:pt-0 border-border/50">
-                  <div className="flex items-center gap-1.5 text-text-secondary text-[11.5px] font-semibold">
-                    <Star className="w-3.5 h-3.5 fill-[#F59E0B] text-[#F59E0B]" />
-                    <span>{book.stars}</span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button className="h-8 px-4 rounded-md border border-border hover:bg-surface-secondary text-text-primary text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>View</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-
-          {activeTab === "followers" && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {visibleItems.map((f: any, idx: number) => (
-                <div key={idx} className="bg-surface border border-border rounded-xl p-4 flex items-center justify-between gap-3 shadow-xs">
-                  <div className="flex items-center gap-3">
-                    <img src={f.avatar} className="w-10 h-10 rounded-full object-cover shrink-0" />
-                    <div>
-                      <h4 className="text-xs font-bold text-text-primary leading-none">{f.name}</h4>
-                      <span className="text-[10px] text-text-secondary">{f.handle}</span>
-                      <p className="text-[11px] text-text-secondary mt-1">{f.bio}</p>
-                    </div>
-                  </div>
-                  <button className="h-7 px-3 rounded-lg border border-border text-xs font-semibold text-text-primary hover:bg-surface-secondary cursor-pointer transition-colors shrink-0">
-                    Follow Back
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {activeTab === "following" && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {visibleItems.map((f: any, idx: number) => (
-                <div key={idx} className="bg-surface border border-border rounded-xl p-4 flex items-center justify-between gap-3 shadow-xs">
-                  <div className="flex items-center gap-3">
-                    <img src={f.avatar} className="w-10 h-10 rounded-full object-cover shrink-0" />
-                    <div>
-                      <h4 className="text-xs font-bold text-text-primary leading-none">{f.name}</h4>
-                      <span className="text-[10px] text-text-secondary">{f.handle}</span>
-                      <p className="text-[11px] text-text-secondary mt-1">{f.bio}</p>
-                    </div>
-                  </div>
-                  <button className="h-7 px-3 rounded-lg border border-border text-xs font-semibold text-text-secondary hover:bg-[#FEE2E2] hover:text-danger cursor-pointer transition-colors shrink-0">
-                    Unfollow
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Pagination Footer */}
-        {totalPages > 1 && (
-          <div className="pagination-row">
-            <button
-              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
-              className="pag-btn"
-            >
-              <ChevronLeft className="pag-icon" />
-            </button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-              <button
-                key={page}
-                onClick={() => setCurrentPage(page)}
-                className={`pag-btn ${currentPage === page ? "active" : ""}`}
-              >
-                {page}
-              </button>
-            ))}
-            <button
-              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-              disabled={currentPage === totalPages}
-              className="pag-btn"
-            >
-              <ChevronRight className="pag-icon" />
-            </button>
-          </div>
+    <PageContainer className="flex flex-col justify-start pb-6">
+      {/* Top breadcrumbs */}
+      <div className="text-xs text-text-secondary select-none font-mono flex items-center gap-1.5 opacity-80">
+        <span className="hover:text-primary transition-colors cursor-pointer" onClick={() => setActiveUsername("me")}>devbook</span>
+        <span className="text-text-secondary/40 font-normal">/</span>
+        <span className="hover:text-primary transition-colors cursor-pointer" onClick={() => setActiveUsername("me")}>profile</span>
+        <span className="text-text-secondary/40 font-normal">/</span>
+        <span
+          className={`transition-colors cursor-pointer ${activeUsername === "me" ? "text-text-primary font-medium" : "hover:text-primary"}`}
+          onClick={() => setActiveUsername("me")}
+        >
+          me
+        </span>
+        {activeUsername !== "me" && (
+          <>
+            <span className="text-text-secondary/40 font-normal">/</span>
+            <span className="text-text-primary font-medium">{activeUsername}</span>
+          </>
         )}
       </div>
 
-      {/* Edit Profile Modal Dialog */}
-      {isEditOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div onClick={() => setIsEditOpen(false)} className="absolute inset-0 bg-black/60 backdrop-blur-xs" />
-          <form onSubmit={handleSaveProfile} className="bg-surface border border-border w-full max-w-md rounded-2xl shadow-xl flex flex-col overflow-hidden relative z-10 animate-in fade-in zoom-in-95 duration-200">
-            <div className="p-4 border-b border-border flex items-center justify-between">
-              <h3 className="font-heading text-sm font-bold text-text-primary">Edit Profile</h3>
-              <button type="button" onClick={() => setIsEditOpen(false)} className="text-text-secondary hover:text-text-primary cursor-pointer">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="p-5 space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-text-secondary">Full Name</label>
-                <input
-                  type="text"
-                  required
-                  value={formState.name}
-                  onChange={(e) => setFormState({ ...formState, name: e.target.value })}
-                  className="w-full h-9 px-3 border border-border rounded-lg bg-surface text-text-primary text-xs focus:outline-hidden focus:border-primary"
-                />
+      <ProfileView
+        profile={currentProfile}
+        updateMe={updateMe}
+        publishedCount={publishedCount}
+        followers={followersList}
+        following={followingList}
+        toggleFollow={toggleFollow}
+        followingUsernames={following}
+        onSelectUser={setActiveUsername}
+      />
+
+      {userBooks.length > 0 && (
+        <div className="mt-8 space-y-4">
+          <h2 className="text-lg font-bold tracking-tight text-text-primary">Published Books</h2>
+          <div className="w-full overflow-x-auto overflow-y-hidden pb-4 custom-scrollbar flex flex-row gap-4 scroll-smooth">
+            {userBooks.map((book) => (
+              <div key={book.id} className="w-[280px] shrink-0 select-none">
+                <BookCard book={book} />
               </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-text-secondary">Bio</label>
-                <textarea
-                  rows={3}
-                  value={formState.bio}
-                  onChange={(e) => setFormState({ ...formState, bio: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-surface text-text-primary text-xs focus:outline-hidden focus:border-primary resize-none"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-text-secondary">Location</label>
-                <input
-                  type="text"
-                  value={formState.location}
-                  onChange={(e) => setFormState({ ...formState, location: e.target.value })}
-                  className="w-full h-9 px-3 border border-border rounded-lg bg-surface text-text-primary text-xs focus:outline-hidden focus:border-primary"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-text-secondary">Website Link</label>
-                <input
-                  type="text"
-                  value={formState.website}
-                  onChange={(e) => setFormState({ ...formState, website: e.target.value })}
-                  className="w-full h-9 px-3 border border-border rounded-lg bg-surface text-text-primary text-xs focus:outline-hidden focus:border-primary"
-                />
-              </div>
-            </div>
-            <div className="p-4 border-t border-border flex items-center justify-end gap-2 bg-[#FAFAFA]/50 dark:bg-transparent">
-              <button type="button" onClick={() => setIsEditOpen(false)} className="h-8 px-3 rounded-lg border border-border text-xs font-semibold text-text-secondary hover:bg-surface-secondary cursor-pointer transition-colors">
-                Cancel
-              </button>
-              <button type="submit" className="h-8 px-4 rounded-lg bg-[#111827] hover:bg-black text-white text-xs font-semibold cursor-pointer transition-colors">
-                Save Changes
-              </button>
-            </div>
-          </form>
+            ))}
+          </div>
         </div>
       )}
+    </PageContainer>
+  );
+}
+
+// ---------- Shared view ----------
+
+type ViewProps = {
+  profile: {
+    id: string;
+    username: string;
+    name: string;
+    avatar: string;
+    about: string;
+    title: string;
+    location: string;
+    socials: Socials;
+    editable: boolean;
+  };
+  updateMe: (patch: Partial<ProfileData>) => void;
+  publishedCount: number;
+  followers: { username: string; name: string; avatar: string; bio: string }[];
+  following: { username: string; name: string; avatar: string; bio: string }[];
+  toggleFollow: (username: string) => void;
+  followingUsernames: string[];
+  onSelectUser: (username: string) => void;
+};
+
+export function ProfileView({
+  profile,
+  updateMe,
+  publishedCount,
+  followers,
+  following,
+  toggleFollow,
+  followingUsernames,
+  onSelectUser,
+}: ViewProps) {
+  const [editing, setEditing] = useState(false);
+  const [openList, setOpenList] = useState<null | "followers" | "following">(null);
+
+  // Editable state buffers
+  const [draftName, setDraftName] = useState(profile.name);
+  const [draftUsername, setDraftUsername] = useState(profile.username);
+  const [draftTitle, setDraftTitle] = useState(profile.title);
+  const [draftLocation, setDraftLocation] = useState(profile.location);
+  const [draftAbout, setDraftAbout] = useState(profile.about);
+  const [draftSocials, setDraftSocials] = useState<Socials>(profile.socials);
+  const [draftAvatar, setDraftAvatar] = useState(profile.avatar);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const socialErrors = useMemo(() => validateSocials(draftSocials), [draftSocials]);
+  const nameError = !draftName.trim() ? "Name is required" : null;
+  const usernameError = !draftUsername.trim() ? "Alias is required" : null;
+  const hasErrors = Boolean(nameError) || Boolean(usernameError) || Object.values(socialErrors).some(Boolean);
+
+  const isFollowing = followingUsernames.includes(profile.username);
+
+  // Reset states when profile shifts (e.g. visiting other profile)
+  useEffect(() => {
+    setEditing(false);
+    setDraftName(profile.name);
+    setDraftUsername(profile.username);
+    setDraftTitle(profile.title);
+    setDraftLocation(profile.location);
+    setDraftAbout(profile.about);
+    setDraftSocials(profile.socials);
+    setDraftAvatar(profile.avatar);
+    setAvatarError(null);
+  }, [profile]);
+
+  function startEdit() {
+    setDraftName(profile.name);
+    setDraftUsername(profile.username);
+    setDraftTitle(profile.title);
+    setDraftLocation(profile.location);
+    setDraftAbout(profile.about);
+    setDraftSocials(profile.socials);
+    setDraftAvatar(profile.avatar);
+    setAvatarError(null);
+    setEditing(true);
+  }
+
+  function saveEdit() {
+    if (hasErrors) return;
+    updateMe({
+      name: draftName.trim(),
+      username: draftUsername.trim().toLowerCase(),
+      title: draftTitle.trim(),
+      location: draftLocation.trim(),
+      about: draftAbout.trim(),
+      avatar: draftAvatar,
+      socials: normalizeSocials(draftSocials),
+    });
+    setEditing(false);
+  }
+
+  function onPickAvatar(file: File | undefined) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setAvatarError("Please choose an image file.");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setAvatarError("Image must be under 2 MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setDraftAvatar(String(reader.result ?? ""));
+      setAvatarError(null);
+    };
+    reader.onerror = () => setAvatarError("Could not read image.");
+    reader.readAsDataURL(file);
+  }
+
+  const activeAvatar = editing ? draftAvatar : profile.avatar;
+
+  return (
+    <>
+      {/* Matches BookCard's design exactly */}
+      <section className="rounded-2xl border border-border bg-surface p-6 md:p-8 hover:border-primary/20 transition-all duration-150">
+        <div className="flex flex-col gap-8 md:flex-row md:items-start">
+          {/* Left: identity */}
+          <div className="flex flex-1 flex-col sm:flex-row gap-6">
+            {/* Identity Image + Next-to-it Upload Camera layout */}
+            <div className="flex items-center gap-4 shrink-0 mx-auto sm:mx-0">
+              <img
+                src={activeAvatar}
+                alt={profile.name}
+                className="h-24 w-24 rounded-full border border-border bg-background object-cover shrink-0"
+              />
+              {profile.editable && editing && (
+                <div className="flex flex-col gap-2 justify-center shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-surface text-text-primary text-xs hover:bg-surface-secondary cursor-pointer transition-colors shadow-xs animate-in fade-in duration-200"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>Upload photo</span>
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => onPickAvatar(e.target.files?.[0])}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="min-w-0 flex-1 text-center sm:text-left">
+              {/* Alias / Username Field */}
+              {profile.editable && editing ? (
+                <div className="flex items-center justify-center sm:justify-start gap-1">
+                  <span className="font-mono text-xs text-text-secondary select-none">@</span>
+                  <input
+                    value={draftUsername}
+                    onChange={(e) => setDraftUsername(e.target.value.toLowerCase().replace(/\s+/g, ""))}
+                    placeholder="alias"
+                    style={{ fontSize: "10px", fontFamily: "var(--font-code, monospace)" }}
+                    className={`h-7 bg-transparent text-text-primary font-mono text-xs outline-hidden border-b border-border/80 focus:border-primary px-0 pb-0.5 transition-all ${usernameError ? "border-destructive/60" : "border-border/0"
+                      }`}
+                  />
+                  {usernameError && (
+                    <span className="text-[10px] text-destructive">{usernameError}</span>
+                  )}
+                </div>
+              ) : (
+                <div className="font-mono text-xs text-text-secondary select-none">@{profile.username}</div>
+              )}
+
+              {profile.editable && editing ? (
+                <div className="mt-1.5">
+                  <input
+                    value={draftName}
+                    onChange={(e) => setDraftName(e.target.value)}
+                    placeholder="Your name"
+                    style={{ fontSize: "24px", fontWeight: "700", letterSpacing: "-0.025em", lineHeight: "2rem" }}
+                    className={`w-full max-w-sm bg-transparent text-text-primary text-2xl font-bold tracking-tight outline-hidden border-b border-border/80 focus:border-primary px-0 pb-1 leading-tight transition-all ${nameError ? "border-destructive/60" : "border-border/0"
+                      }`}
+                  />
+                  {nameError && (
+                    <div className="mt-1 text-xs text-destructive">{nameError}</div>
+                  )}
+                </div>
+              ) : (
+                <h1 className="mt-1.5 text-2xl font-bold tracking-tight text-text-primary leading-tight">
+                  {profile.name}
+                </h1>
+              )}
+
+              {profile.editable && editing ? (
+                <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
+                  <FieldInput
+                    icon={<Briefcase className="h-3.5 w-3.5 text-text-secondary/60" />}
+                    value={draftTitle}
+                    onChange={setDraftTitle}
+                    placeholder="Title (e.g. Backend engineer)"
+                    max={80}
+                  />
+                  <FieldInput
+                    icon={<MapPin className="h-3.5 w-3.5 text-text-secondary/60" />}
+                    value={draftLocation}
+                    onChange={setDraftLocation}
+                    placeholder="Location"
+                    max={80}
+                  />
+                </div>
+              ) : (
+                (profile.title || profile.location) && (
+                  <div className="mt-2 flex flex-wrap justify-center sm:justify-start items-center gap-x-4 gap-y-1 text-xs text-text-secondary">
+                    {profile.title && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <Briefcase className="h-3.5 w-3.5 text-text-muted" /> {profile.title}
+                      </span>
+                    )}
+                    {profile.location && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <MapPin className="h-3.5 w-3.5 text-text-muted" /> {profile.location}
+                      </span>
+                    )}
+                  </div>
+                )
+              )}
+
+              {profile.editable && editing ? (
+                <div className="mt-3">
+                  <textarea
+                    value={draftAbout}
+                    onChange={(e) => setDraftAbout(e.target.value.slice(0, 250))}
+                    rows={3}
+                    placeholder="Bio — a couple of lines about you"
+                    style={{ fontSize: "14px", lineHeight: "1.5rem" }}
+                    className="w-full max-w-xl bg-transparent text-text-secondary text-sm leading-relaxed outline-hidden border-b border-border/80 focus:border-primary px-0 py-1 resize-none transition-all"
+                  />
+                  <div className="mt-1 text-[10px] font-mono text-muted-foreground">
+                    {draftAbout.length}/250
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-3 max-w-xl text-sm leading-relaxed text-text-secondary select-text whitespace-pre-wrap">
+                  {profile.about}
+                </p>
+              )}
+              {avatarError && (
+                <div className="mt-2 text-xs text-destructive">{avatarError}</div>
+              )}
+            </div>
+          </div>
+
+          {/* Right: socials + actions */}
+          <div className="flex w-full flex-col gap-3 md:w-64">
+            <div className="flex items-center justify-between">
+              <div className="font-mono text-[10px] uppercase tracking-widest text-text-secondary/60 select-none">
+                Links
+              </div>
+              {profile.editable && !editing && (
+                <button
+                  onClick={startEdit}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface hover:bg-surface-secondary px-2.5 py-1.5 text-xs text-text-secondary cursor-pointer transition-colors"
+                >
+                  <Pencil className="h-3 w-3" /> Edit
+                </button>
+              )}
+            </div>
+
+            <SocialsPanel
+              editing={profile.editable && editing}
+              value={profile.editable && editing ? draftSocials : profile.socials}
+              onChange={setDraftSocials}
+              errors={profile.editable && editing ? socialErrors : undefined}
+            />
+
+            {profile.editable ? (
+              editing ? (
+                <div className="flex gap-2">
+                  <button
+                    onClick={saveEdit}
+                    disabled={hasErrors}
+                    className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 px-3 py-1.5 text-xs font-bold cursor-pointer transition-all"
+                  >
+                    <Check className="h-3.5 w-3.5" /> Save
+                  </button>
+                  <button
+                    onClick={() => setEditing(false)}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-surface hover:bg-surface-secondary px-3 py-1.5 text-xs text-text-secondary cursor-pointer transition-colors"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ) : null
+            ) : (
+              <button
+                onClick={() => toggleFollow(profile.username)}
+                className={`w-full text-center rounded-lg px-3 py-1.5 text-xs font-semibold cursor-pointer transition-all shadow-xs ${isFollowing
+                  ? "border border-border text-text-primary bg-surface hover:bg-surface-secondary"
+                  : " text hover:bg-primary/"
+                  }`}
+              >
+                {isFollowing ? "Unfollow" : "Follow"}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Stats Grid */}
+        <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-border-light pt-6">
+          <Stat
+            label="Published"
+            value={publishedCount}
+          />
+          <Stat
+            label="Followers"
+            value={followers.length}
+            onClick={() => setOpenList("followers")}
+          />
+          <Stat
+            label="Following"
+            value={following.length}
+            onClick={() => setOpenList("following")}
+          />
+        </div>
+      </section>
+
+      <PeopleDialog
+        open={openList !== null}
+        onOpenChange={(o) => !o && setOpenList(null)}
+        title={openList === "followers" ? "Followers" : "Following"}
+        people={openList === "followers" ? followers : following}
+        toggleFollow={toggleFollow}
+        followingUsernames={followingUsernames}
+        onSelectUser={onSelectUser}
+      />
+    </>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  onClick,
+}: {
+  label: string;
+  value?: number;
+  onClick?: () => void;
+}) {
+  const cls =
+    "relative overflow-hidden rounded-xl border border-border bg-surface px-4 py-3 text-left transition-all duration-150 select-none flex flex-col justify-between h-[80px]";
+
+  const content = (
+    <>
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-[9px] uppercase tracking-widest text-text-secondary/60">
+          {label}
+        </span>
+      </div>
+      <div className="mt-1 text-2xl font-bold tracking-tight text-text-primary">
+        {value ?? 0}
+      </div>
+    </>
+  );
+
+  return onClick ? (
+    <button
+      onClick={onClick}
+      className={`${cls} hover:border-primary/20 cursor-pointer`}
+    >
+      {content}
+    </button>
+  ) : (
+    <div className={cls}>{content}</div>
+  );
+}
+
+function FieldInput({
+  icon,
+  value,
+  onChange,
+  placeholder,
+  max,
+}: {
+  icon: React.ReactNode;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  max?: number;
+}) {
+  return (
+    <label className="flex items-center gap-1.5 bg-transparent border-b border-border/80 focus-within:border-primary transition-all py-1 px-0">
+      {icon}
+      <input
+        value={value}
+        onChange={(e) => onChange(max ? e.target.value.slice(0, max) : e.target.value)}
+        placeholder={placeholder}
+        style={{ fontSize: "12px" }}
+        className="min-w-0 flex-1 bg-transparent text-xs outline-hidden placeholder:text-muted-foreground/60 text-text-secondary py-0 px-0"
+      />
+    </label>
+  );
+}
+
+function SocialsPanel({
+  editing,
+  value,
+  onChange,
+  errors,
+}: {
+  editing: boolean;
+  value: Socials;
+  onChange: (s: Socials) => void;
+  errors?: Record<keyof Socials, string | null>;
+}) {
+  if (editing) {
+    return (
+      <div className="flex flex-col gap-2">
+        {SOCIAL_FIELDS.map((f) => {
+          const Icon = f.icon;
+          const err = errors?.[f.key];
+          return (
+            <div key={f.key}>
+              <label
+                className={`flex items-center gap-2 rounded-lg border bg-surface px-3 py-1.5 focus-within:border-primary transition-all ${err ? "border-destructive/60" : "border-border"
+                  }`}
+              >
+                <Icon className="h-3.5 w-3.5 text-text-secondary/60" />
+                <input
+                  value={value[f.key]}
+                  onChange={(e) => onChange({ ...value, [f.key]: e.target.value })}
+                  placeholder={f.placeholder}
+                  style={{ fontSize: "12px" }}
+                  className="min-w-0 flex-1 bg-transparent text-xs outline-hidden placeholder:text-muted-foreground/60 text-text-primary"
+                />
+              </label>
+              {err && <div className="mt-1 text-[11px] text-destructive">{err}</div>}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  const items = SOCIAL_FIELDS.filter((f) => value[f.key]?.trim());
+  if (items.length === 0) {
+    return <div className="text-xs text-text-secondary select-none italic text-center py-4 bg-surface/50 rounded-lg border border-border/60">No links yet.</div>;
+  }
+  return (
+    <ul className="flex flex-col gap-2">
+      {items.map((f) => {
+        const Icon = f.icon;
+        return (
+          <li key={f.key}>
+            <a
+              href={f.href(value[f.key])}
+              target={f.key === "email" ? undefined : "_blank"}
+              rel="noreferrer"
+              className="flex items-center gap-3 rounded-lg border border-border bg-surface px-3.5 py-2 text-xs text-text-primary transition-all duration-150 hover:border-primary/30"
+            >
+              <Icon className="h-3.5 w-3.5 text-text-secondary/60" />
+              <span className="truncate flex-1">{value[f.key]}</span>
+            </a>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function PeopleDialog({
+  open,
+  onOpenChange,
+  title,
+  people,
+  toggleFollow,
+  followingUsernames,
+  onSelectUser,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  title: string;
+  people: { username: string; name: string; avatar: string; bio: string }[];
+  toggleFollow: (username: string) => void;
+  followingUsernames: string[];
+  onSelectUser: (username: string) => void;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div onClick={() => onOpenChange(false)} className="absolute inset-0 bg-black/60 backdrop-blur-xs transition-opacity duration-300" />
+      <div className="bg-surface border border-border w-full max-w-md rounded-2xl shadow-xl flex flex-col overflow-hidden relative z-10 animate-in fade-in zoom-in-95 duration-200">
+        <div className="p-4 border-b border-border flex items-center justify-between">
+          <h3 className="font-heading text-sm font-bold text-text-primary">{title}</h3>
+          <button type="button" onClick={() => onOpenChange(false)} className="text-text-secondary hover:text-text-primary cursor-pointer transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-4 overflow-hidden max-h-[60vh] flex flex-col">
+          {people.length === 0 ? (
+            <div className="py-8 text-center text-sm text-text-secondary select-none">No one yet.</div>
+          ) : (
+            <ul className="divide-y divide-border overflow-y-auto custom-scrollbar pr-1">
+              {people.map((p) => {
+                const isFollowing = followingUsernames.includes(p.username);
+                return (
+                  <li key={p.username} className="flex items-center gap-3 py-3">
+                    <img
+                      src={p.avatar}
+                      alt={p.name}
+                      onClick={() => {
+                        onSelectUser(p.username);
+                        onOpenChange(false);
+                      }}
+                      className="h-9 w-9 rounded-full border border-border bg-surface object-cover select-none shadow-xs cursor-pointer hover:opacity-85 transition-opacity"
+                    />
+                    <div className="min-w-0 flex-1 cursor-pointer" onClick={() => {
+                      onSelectUser(p.username);
+                      onOpenChange(false);
+                    }}>
+                      <div className="truncate text-sm font-semibold text-text-primary hover:text-primary transition-colors">{p.name}</div>
+                      <div className="truncate font-mono text-[11px] text-text-secondary select-all">
+                        @{p.username}
+                        {p.bio ? ` · ${p.bio}` : ""}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => toggleFollow(p.username)}
+                      className={`rounded-md px-2.5 py-1 text-xs font-semibold cursor-pointer transition-colors shadow-xs ${isFollowing
+                        ? "border border-border text-text-primary bg-background hover:border-foreground/30"
+                        : "bg-background hover:border-foreground/30"
+                        }`}
+                    >
+                      {isFollowing ? "Unfollow" : "Follow"}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </div>
     </div>
   );
+}
+
+// ---------- Validation & formatting ----------
+
+function normalizeUrl(v: string): string {
+  const t = v.trim();
+  if (!t) return "";
+  if (/^https?:\/\//i.test(t)) return t;
+  return `https://${t}`;
+}
+
+function isValidHttpUrl(v: string): boolean {
+  try {
+    const u = new URL(v);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function isValidEmail(v: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+}
+
+export function validateSocials(s: Socials): Record<keyof Socials, string | null> {
+  const errs: Record<keyof Socials, string | null> = {
+    github: null,
+    linkedin: null,
+    portfolio: null,
+    email: null,
+  };
+  if (s.github.trim()) {
+    const u = normalizeUrl(s.github);
+    if (!isValidHttpUrl(u) || !/github\.com/i.test(u)) errs.github = "Expected a github.com URL";
+  }
+  if (s.linkedin.trim()) {
+    const u = normalizeUrl(s.linkedin);
+    if (!isValidHttpUrl(u) || !/linkedin\.com/i.test(u))
+      errs.linkedin = "Expected a linkedin.com URL";
+  }
+  if (s.portfolio.trim()) {
+    const u = normalizeUrl(s.portfolio);
+    if (!isValidHttpUrl(u)) errs.portfolio = "Enter a valid URL";
+  }
+  if (s.email.trim() && !isValidEmail(s.email)) {
+    errs.email = "Enter a valid email";
+  }
+  return errs;
+}
+
+export function normalizeSocials(s: Socials): Socials {
+  return {
+    github: s.github.trim() ? normalizeUrl(s.github) : "",
+    linkedin: s.linkedin.trim() ? normalizeUrl(s.linkedin) : "",
+    portfolio: s.portfolio.trim() ? normalizeUrl(s.portfolio) : "",
+    email: s.email.trim(),
+  };
 }
