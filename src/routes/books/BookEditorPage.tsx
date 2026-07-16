@@ -47,6 +47,8 @@ import {
   AlertTriangle,
   X,
   Loader2,
+  Lock,
+  Users,
 } from "lucide-react";
 
 type StepNode = {
@@ -340,6 +342,22 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
     }, 500);
   }, [activeStepRef, syncDatabase]);
 
+  const handleUpdatePhaseTitle = useCallback(async (phaseId: string, newTitle: string) => {
+    setPhases((prev) =>
+      prev.map((p) => (p.id === phaseId ? { ...p, title: newTitle } : p))
+    );
+    try {
+      await updatePhaseMutation.mutateAsync({
+        phaseId,
+        bookId,
+        updates: { title: newTitle },
+      });
+      showToast("Phase title updated", "success");
+    } catch (err) {
+      showToast("Failed to update phase title", "error");
+    }
+  }, [bookId, updatePhaseMutation, showToast]);
+
   // Clean up autosave timeouts on unmount
   useEffect(() => {
     return () => {
@@ -555,11 +573,20 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
           },
         });
       }
+      
+      // Publish the book itself in the database
+      await updateBookMutation.mutateAsync({
+        bookId,
+        updates: {
+          publication_status: "PUBLISHED",
+        },
+      });
+
       setInitialStepMarkdown(activeStep?.markdown || "");
       setPublishOpen(false);
-      showToast("Step published", "success");
+      showToast("Book published successfully", "success");
     } catch (err) {
-      showToast("Failed to publish step", "error");
+      showToast("Failed to publish book", "error");
     }
   };
 
@@ -950,6 +977,7 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
             addStep={addStep}
             deleteStep={deleteStep}
             onBack={onBack}
+            onUpdatePhaseTitle={handleUpdatePhaseTitle}
           />
 
           {/* Center: split editor + live preview */}
@@ -961,37 +989,89 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
                   onChange={(e) => handlePropertyChange("title", e.target.value)}
                   className="w-full bg-transparent text-lg font-semibold tracking-tight focus:outline-none"
                 />
-                <div className="flex items-center gap-3 shrink-0 ml-3 bg-surface-2 border border-hairline p-0.5 rounded select-none">
-                  <button
-                    onClick={() => setTab("editor")}
-                    className={`px-2 py-0.5 rounded text-[10px] cursor-pointer transition-colors ${
-                      tab === "editor"
-                        ? "bg-white dark:bg-zinc-800 text-foreground shadow-xs font-semibold"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    Editor
-                  </button>
-                  <button
-                    onClick={() => setTab("collaborators")}
-                    className={`px-2 py-0.5 rounded text-[10px] cursor-pointer transition-colors ${
-                      (tab as string) === "collaborators"
-                        ? "bg-white dark:bg-zinc-800 text-foreground shadow-xs font-semibold"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    Collaborators
-                  </button>
-                  <button
-                    onClick={() => setTab("import")}
-                    className={`px-2 py-0.5 rounded text-[10px] cursor-pointer transition-colors ${
-                      (tab as string) === "import"
-                        ? "bg-white dark:bg-zinc-800 text-foreground shadow-xs font-semibold"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    Import
-                  </button>
+                <div className="flex items-center gap-2 shrink-0 ml-3">
+                  {/* Editor/Collaborators Tab Selector */}
+                  <div className="flex items-center gap-1 bg-surface-2 border border-hairline p-0.5 rounded select-none">
+                    <button
+                      onClick={() => setTab("editor")}
+                      className={`px-2.5 py-0.5 rounded text-[10px] cursor-pointer transition-colors ${
+                        tab === "editor"
+                          ? "bg-white dark:bg-zinc-800 text-foreground shadow-xs font-bold"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Editor
+                    </button>
+                    <button
+                      onClick={() => setTab("collaborators")}
+                      className={`px-2.5 py-0.5 rounded text-[10px] cursor-pointer transition-colors ${
+                        (tab as string) === "collaborators"
+                          ? "bg-white dark:bg-zinc-800 text-foreground shadow-xs font-bold"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Collaborators
+                    </button>
+                  </div>
+
+                  {/* Visibility Dropdown Popover */}
+                  <div ref={menuRef} className="relative">
+                    <button
+                      onClick={() => setMenuOpen(!menuOpen)}
+                      className="inline-flex h-[22px] items-center gap-1 rounded-md border border-hairline bg-surface-2 px-2 text-[10px] font-semibold text-text-primary hover:text-foreground hover:border-foreground/20 cursor-pointer transition-colors select-none"
+                    >
+                      {dbBook?.access_level === "PUBLIC" ? (
+                        <>
+                          <Globe className="h-3 w-3 text-muted-foreground" /> Public
+                        </>
+                      ) : dbBook?.access_level === "PRIVATE" ? (
+                        <>
+                          <Lock className="h-3 w-3 text-muted-foreground" /> Private
+                        </>
+                      ) : (
+                        <>
+                          <Users className="h-3 w-3 text-muted-foreground" /> Followers
+                        </>
+                      )}
+                    </button>
+                    {menuOpen && (
+                      <div className="absolute right-0 top-full z-50 mt-1 w-44 overflow-hidden rounded-lg border border-hairline bg-card shadow-lg">
+                        <div className="px-3 pt-2 pb-1 text-[9px] font-bold uppercase tracking-wider text-muted-foreground border-b border-hairline bg-surface/50">
+                          Visibility
+                        </div>
+                        <div className="py-1">
+                          {([
+                            { v: "public", icon: Globe, label: "Public" },
+                            { v: "private", icon: Lock, label: "Private" },
+                            { v: "followers", icon: Users, label: "Followers" },
+                          ] as const).map(({ v, icon: Icon, label }) => (
+                            <button
+                              key={v}
+                              onClick={() => {
+                                handleBookVisibilityChange(v);
+                                setMenuOpen(false);
+                              }}
+                              className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-surface-2 cursor-pointer ${
+                                (dbBook?.access_level === "PUBLIC" && v === "public") ||
+                                (dbBook?.access_level === "PRIVATE" && v === "private") ||
+                                (dbBook?.access_level === "FOLLOWERS" && v === "followers")
+                                  ? "bg-surface-2 font-bold text-foreground"
+                                  : "text-muted-foreground hover:text-foreground"
+                              }`}
+                            >
+                              <Icon className="h-3.5 w-3.5" />
+                              <span className="flex-1">{label}</span>
+                              {((dbBook?.access_level === "PUBLIC" && v === "public") ||
+                                (dbBook?.access_level === "PRIVATE" && v === "private") ||
+                                (dbBook?.access_level === "FOLLOWERS" && v === "followers")) && (
+                                <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1019,12 +1099,7 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
                 <PreviewArea
                   previewContainerRef={previewContainerRef}
                   previewMarkdown={previewMarkdown}
-                  menuRef={menuRef}
-                  menuOpen={menuOpen}
-                  setMenuOpen={setMenuOpen}
                   dbBook={dbBook}
-                  handleBookVisibilityChange={handleBookVisibilityChange}
-                  handleBookDelete={handleBookDelete}
                 />
               </motion.div>
 
@@ -1169,7 +1244,7 @@ function PublishModal({
           <button
             onClick={onConfirm}
             disabled={!canPublish}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-foreground px-3 text-xs font-medium text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-black text-white dark:bg-white dark:text-black px-3 text-xs font-medium transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
           >
             <Globe className="h-3.5 w-3.5" /> Publish now
           </button>

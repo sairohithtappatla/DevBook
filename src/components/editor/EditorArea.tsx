@@ -14,6 +14,7 @@ type EditorAreaProps = {
   onDragLeave?: (e: React.DragEvent) => void;
   onDrop?: (e: React.DragEvent) => void;
   onPaste?: (e: React.ClipboardEvent) => void;
+  imageUploadHandler?: (file: File) => Promise<string>;
   isDraggingFile?: boolean;
 };
 
@@ -28,6 +29,7 @@ export const EditorArea = memo(function EditorArea({
   onDragLeave,
   onDrop,
   onPaste,
+  imageUploadHandler,
   isDraggingFile,
 }: EditorAreaProps) {
   return (
@@ -50,26 +52,29 @@ export const EditorArea = memo(function EditorArea({
           Editor
         </span>
         <div className="flex items-center gap-1.5 shrink-0 ml-3 bg-surface-2 border border-hairline p-0.5 rounded select-none">
-          <button
-            onClick={() => setEditorView("rich")}
-            className={`px-2 py-0.5 rounded text-[10px] cursor-pointer transition-colors ${
-              editorView === "rich"
-                ? "bg-white dark:bg-zinc-800 text-foreground shadow-xs font-semibold"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Visual Editor
-          </button>
+          
           <button
             onClick={() => setEditorView("raw")}
             className={`px-2 py-0.5 rounded text-[10px] cursor-pointer transition-colors ${
               editorView === "raw"
-                ? "bg-white dark:bg-zinc-800 text-foreground shadow-xs font-semibold"
-                : "text-muted-foreground hover:text-foreground"
+                ? "bg-white  text-black shadow-xs font-semibold"
+                : "bg-black text-white"
             }`}
           >
             Raw Markdown
           </button>
+
+          <button
+            onClick={() => setEditorView("rich")}
+            className={`px-2 py-0.5 rounded text-[10px] cursor-pointer transition-colors ${
+              editorView === "rich"
+                ? "bg-white  text-black shadow-xs font-semibold"
+                : "bg-black text-white "
+            }`}
+          >
+            Visual Editor
+          </button>
+
         </div>
       </div>
       <div className="flex-1 min-h-0 overflow-hidden">
@@ -81,7 +86,12 @@ export const EditorArea = memo(function EditorArea({
               </div>
             }
           >
-            <MDXEditorComponent ref={editorRef} markdown={markdown} onChange={handleMarkdownChange} />
+            <MDXEditorComponent
+              ref={editorRef}
+              markdown={markdown}
+              onChange={handleMarkdownChange}
+              imageUploadHandler={imageUploadHandler}
+            />
           </Suspense>
         ) : (
           <textarea

@@ -147,6 +147,8 @@ export function useUpdatePhase() {
         if (!old) return [];
         return old.map((p: any) => (p.id === variables.phaseId ? { ...p, ...data } : p));
       });
+      queryClient.invalidateQueries({ queryKey: ["book-structure", variables.bookId] });
+      queryClient.invalidateQueries({ queryKey: ["phases", variables.bookId] });
     },
   });
 }

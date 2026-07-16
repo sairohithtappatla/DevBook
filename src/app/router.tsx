@@ -18,6 +18,8 @@ import { BookEditorPage } from "@/routes/books/BookEditorPage";
 import { BookReaderPage } from "@/routes/books/BookReaderPage";
 import { ProgressPage } from "@/routes/progress/ProgressPage";
 import { ProfilePage } from "@/routes/profile/ProfilePage";
+import { LandingPage } from "@/routes/landing/LandingPage";
+import { useBook } from "@/hooks/useBooks";
 import { Loader2 } from "lucide-react";
 import { SearchProvider } from "@/providers/SearchProvider";
 import { useState } from "react";
@@ -84,7 +86,7 @@ const AuthenticatedLayout = () => {
       <SearchProvider>
         <AppShell
           currentTab={currentTab}
-          onChangeTab={(tab) => navigate({ to: tab === "home" ? "/" : "/" + tab })}
+          onChangeTab={(tab) => navigate({ to: tab === "home" ? "/home" : "/" + tab })}
           rightPanelContent={getRightPanelContent()}
           showSearch={currentTab === "home" || currentTab === "featured" || currentTab === "progress" || currentTab === "profile"}
           showTopNavigation={currentTab !== "books" && currentTab !== "progress" && currentTab !== "profile"}
@@ -159,14 +161,17 @@ function ProfileRouteComponent() {
 function ReaderRouteComponent() {
   const { bookId } = useParams({ from: readerRoute.id });
   const navigate = useNavigate();
+  const { isAuthenticated, user } = useAuth();
+  const { data: dbBook } = useBook(bookId);
+
+  const canEdit = isAuthenticated && user && dbBook && dbBook.created_by === user.id;
+
   return (
-    <ProtectedRoute>
-      <BookReaderPage
-        bookId={bookId}
-        onBack={() => navigate({ to: "/books" })}
-        onEdit={() => navigate({ to: `/books/${bookId}/edit` })}
-      />
-    </ProtectedRoute>
+    <BookReaderPage
+      bookId={bookId}
+      onBack={() => navigate({ to: isAuthenticated ? "/books" : "/" })}
+      onEdit={canEdit ? () => navigate({ to: `/books/${bookId}/edit` }) : undefined}
+    />
   );
 }
 
@@ -184,10 +189,10 @@ function EditorRouteComponent() {
   );
 }
 
-const homeRoute = createRoute({
-  getParentRoute: () => authenticatedRoute,
+const landingRoute = createRoute({
+  getParentRoute: () => rootRoute,
   path: "/",
-  component: HomeRouteComponent,
+  component: LandingPage,
 });
 
 const homePathRoute = createRoute({
@@ -234,9 +239,9 @@ const editorRoute = createRoute({
 
 // 6. Router Setup
 const routeTree = rootRoute.addChildren([
+  landingRoute,
   loginRoute,
   authenticatedRoute.addChildren([
-    homeRoute,
     homePathRoute,
     featuredRoute,
     booksRoute,

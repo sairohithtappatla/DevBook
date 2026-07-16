@@ -1,9 +1,10 @@
-import { useState } from "react";
-import { X, Plus } from "lucide-react";
+import { useState, useEffect } from "react";
+import { X, Plus, Loader2 } from "lucide-react";
 
 type Props = {
   isOpen: boolean;
   onClose: () => void;
+  isPending?: boolean;
   onCreateBook: (book: {
     title: string;
     description: string;
@@ -13,34 +14,37 @@ type Props = {
   }) => void;
 };
 
-export function CreateBookModal({ isOpen, onClose, onCreateBook }: Props) {
+export function CreateBookModal({ isOpen, onClose, isPending = false, onCreateBook }: Props) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("Backend");
   const [difficulty, setDifficulty] = useState<"Beginner" | "Intermediate" | "Advanced">("Beginner");
   const [coverType, setCoverType] = useState("workflow");
 
+  // Reset state on open
+  useEffect(() => {
+    if (isOpen) {
+      setTitle("");
+      setDescription("");
+      setCategory("Backend");
+      setDifficulty("Beginner");
+      setCoverType("workflow");
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim() || isPending) return;
     
     onCreateBook({
       title: title.trim(),
-      description: description.trim() || "A structured guide and workflow for your next coding project.",
+      description: description.trim() || "",
       category,
       difficulty,
       coverType
     });
-    
-    // Reset state
-    setTitle("");
-    setDescription("");
-    setCategory("Backend");
-    setDifficulty("Beginner");
-    setCoverType("workflow");
-    onClose();
   };
 
   return (
@@ -127,15 +131,27 @@ export function CreateBookModal({ isOpen, onClose, onCreateBook }: Props) {
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-border rounded-lg text-text-secondary hover:bg-surface-secondary hover:text-text-primary transition-colors cursor-pointer"
+              disabled={isPending}
+              className="px-4 py-2 border border-border rounded-lg text-text-secondary hover:bg-surface-secondary hover:text-text-primary transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex items-center gap-1 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg shadow-sm transition-colors cursor-pointer font-bold"
+              disabled={isPending}
+              className="flex items-center gap-1 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg shadow-sm transition-colors cursor-pointer font-bold disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              <Plus className="w-4 h-4" /> Create
+              {isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" />
+                  Create
+                </>
+              )}
             </button>
           </div>
         </form>

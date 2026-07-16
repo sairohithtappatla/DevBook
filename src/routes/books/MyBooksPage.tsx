@@ -16,9 +16,12 @@ import {
   User,
   Users,
   Layers,
+  Trash2,
+  RefreshCw,
 } from "lucide-react";
 import { CreateBookModal } from "@/components/modals/CreateBookModal";
-import { useBooks, useBookStepCounts, useCreateBook } from "@/hooks/useBooks";
+import { useBooks, useBookStepCounts, useCreateBook, useDeleteBook } from "@/hooks/useBooks";
+import { useAuth } from "@/hooks/useAuth";
 import type { DBBook } from "@/services/db";
 
 type BookRecord = DBBook & {
@@ -37,6 +40,7 @@ type BookItem = {
   updatedRelative: string;
   status: "Published" | "Draft" | "Archived";
   coverType: string;
+  created_by: string | null;
 };
 
 function mapDBBookToBookItem(dbBook: BookRecord, stepCounts?: Record<string, number>): BookItem {
@@ -73,6 +77,7 @@ function mapDBBookToBookItem(dbBook: BookRecord, stepCounts?: Record<string, num
           ? "Archived"
           : "Draft",
     coverType: category.toLowerCase(),
+    created_by: dbBook.created_by || null,
   };
 }
 
@@ -125,14 +130,21 @@ export function MyBooksPage({
   onEditBook?: (bookId: string) => void;
   onViewBook?: (bookId: string) => void;
 } = {}) {
-  const { data: dbBooks = [] } = useBooks();
+  const { data: dbBooks = [], refetch: refetchBooks, isFetching: isFetchingBooks } = useBooks();
   const bookIds = useMemo(() => dbBooks.map((book) => book.id), [dbBooks]);
-  const { data: stepCounts } = useBookStepCounts(bookIds);
+  const { data: stepCounts, refetch: refetchCounts, isFetching: isFetchingCounts } = useBookStepCounts(bookIds);
+  
+  const handleRefresh = async () => {
+    await Promise.all([refetchBooks(), refetchCounts()]);
+  };
+
   const books = useMemo(
     () => dbBooks.map((book) => mapDBBookToBookItem(book, stepCounts)),
     [dbBooks, stepCounts],
   );
   const createBookMutation = useCreateBook();
+  const { user } = useAuth();
+  const deleteBookMutation = useDeleteBook();
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"all" | "published" | "drafts" | "archived">("all");
@@ -172,22 +184,38 @@ export function MyBooksPage({
     difficulty: "Beginner" | "Intermediate" | "Advanced";
     coverType: string;
   }): void => {
-    createBookMutation.mutate({
-      title: newBook.title,
-      slug: newBook.title.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-      description: newBook.description,
-      cover_url: newBook.coverType,
-      publication_status: "DRAFT",
-      access_level: "PUBLIC",
-      estimated_read_time: 60,
-      difficulty:
-        newBook.difficulty === "Beginner"
-          ? "BEGINNER"
-          : newBook.difficulty === "Intermediate"
-            ? "INTERMEDIATE"
-            : "ADVANCED",
-      tags: [newBook.category],
-    });
+    // Generate unique slug suffix to prevent collision
+    const slugSuffix = Math.random().toString(36).substring(2, 7);
+    const cleanTitle = newBook.title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const uniqueSlug = `${cleanTitle}-${slugSuffix}`;
+
+    createBookMutation.mutate(
+      {
+        title: newBook.title,
+        slug: uniqueSlug,
+        description: newBook.description,
+        cover_url: newBook.coverType,
+        publication_status: "DRAFT",
+        access_level: "PUBLIC",
+        estimated_read_time: 60,
+        difficulty:
+          newBook.difficulty === "Beginner"
+            ? "BEGINNER"
+            : newBook.difficulty === "Intermediate"
+              ? "INTERMEDIATE"
+              : "ADVANCED",
+        tags: [newBook.category],
+      },
+      {
+        onSuccess: () => {
+          setIsCreateOpen(false);
+        },
+        onError: (err) => {
+          console.error("Failed to create book:", err);
+          alert(`Failed to create book: ${err instanceof Error ? err.message : String(err)}`);
+        },
+      }
+    );
   };
 
   const tabItems = [
@@ -235,9 +263,14 @@ export function MyBooksPage({
             Sort: {sortBy}
             <ChevronDown className="filter-icon" />
           </button>
-          <button className="filter-dropdown">
-            <SlidersHorizontal className="filter-icon" />
-            Filter
+          <button
+            onClick={handleRefresh}
+            disabled={isFetchingBooks || isFetchingCounts}
+            className="filter-dropdown flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            title="Refresh from DB"
+          >
+            <RefreshCw className={`filter-icon w-3.5 h-3.5 ${isFetchingBooks || isFetchingCounts ? "animate-spin" : ""}`} />
+            Refresh
           </button>
         </div>
       </div>
@@ -293,9 +326,19 @@ export function MyBooksPage({
                     >
                       <Pencil className="table-action-icon" />
                     </button>
-                    <button className="btn-table-action" title="More">
-                      <MoreVertical className="table-action-icon" />
-                    </button>
+                    {user && user.id === book.created_by && (
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`Are you sure you want to delete "${book.title}"?`)) {
+                            deleteBookMutation.mutate(book.id);
+                          }
+                        }}
+                        className="btn-table-action text-destructive hover:bg-destructive/10"
+                        title="Delete"
+                      >
+                        <Trash2 className="table-action-icon" />
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -333,6 +376,7 @@ export function MyBooksPage({
       <CreateBookModal
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
+        isPending={createBookMutation.isPending}
         onCreateBook={handleCreateBook}
       />
     </div>

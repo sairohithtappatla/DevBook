@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useState, useEffect } from "react";
 import {
   ChevronLeft,
   BookOpen,
@@ -46,20 +46,46 @@ type EditorSidebarProps = {
   addStep: (phaseId: string) => void;
   deleteStep: (phaseId: string, stepId: string) => void;
   onBack: () => void;
+  onUpdatePhaseTitle?: (phaseId: string, newTitle: string) => void;
 };
 
 const SortableItem = memo(function SortableItem({
   id,
   title,
   onDelete,
+  onUpdateTitle,
   depth = 0,
 }: {
   id: string;
   title: string;
   onDelete?: () => void;
+  onUpdateTitle?: (newTitle: string) => void;
   depth?: number;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const [isEditing, setIsEditing] = useState(false);
+  const [tempTitle, setTempTitle] = useState(title);
+
+  useEffect(() => {
+    setTempTitle(title);
+  }, [title]);
+
+  const handleSave = () => {
+    setIsEditing(false);
+    if (tempTitle.trim() && tempTitle.trim() !== title && onUpdateTitle) {
+      onUpdateTitle(tempTitle.trim());
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleSave();
+    } else if (e.key === "Escape") {
+      setTempTitle(title);
+      setIsEditing(false);
+    }
+  };
+
   return (
     <div
       ref={setNodeRef}
@@ -74,7 +100,25 @@ const SortableItem = memo(function SortableItem({
       <div {...attributes} {...listeners} className="cursor-grab select-none text-muted-foreground/60 active:cursor-grabbing">
         ⋮⋮
       </div>
-      <span className="min-w-0 flex-1 truncate font-semibold leading-[18px] text-foreground">{title}</span>
+      {isEditing ? (
+        <input
+          type="text"
+          value={tempTitle}
+          onChange={(e) => setTempTitle(e.target.value)}
+          onBlur={handleSave}
+          onKeyDown={handleKeyDown}
+          autoFocus
+          className="min-w-0 flex-1 bg-background border border-hairline rounded px-1.5 py-0.5 text-xs font-semibold focus:outline-none"
+        />
+      ) : (
+        <span
+          onDoubleClick={() => setIsEditing(true)}
+          className="min-w-0 flex-1 truncate font-semibold leading-[18px] text-foreground cursor-text select-none"
+          title="Double click to edit phase title"
+        >
+          {title}
+        </span>
+      )}
       {onDelete && (
         <button
           onClick={onDelete}
@@ -99,6 +143,7 @@ export const EditorSidebar = memo(function EditorSidebar({
   addStep,
   deleteStep,
   onBack,
+  onUpdatePhaseTitle,
 }: EditorSidebarProps) {
   return (
     <aside className="scroll-thin w-[268.8px] shrink-0 max-h-[calc(100vh-3.5rem)] overflow-y-auto border-r border-hairline p-4 lg:sticky lg:top-14">
@@ -146,6 +191,7 @@ export const EditorSidebar = memo(function EditorSidebar({
                     id={p.id}
                     title={p.title.replace(/^Phase \d+\s*[-·—:]\s*/i, `Phase ${phaseIdx} — `)}
                     onDelete={() => deletePhase(p.id)}
+                    onUpdateTitle={(newTitle) => onUpdatePhaseTitle?.(p.id, newTitle)}
                   />
                   <div className="mt-0.5 flex flex-col gap-0.5 pl-3">
                     {p.steps.map((s, si) => {

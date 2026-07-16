@@ -18,7 +18,7 @@ function getEditorModule() {
   return editorModulePromise;
 }
 
-async function uploadImage(file: File): Promise<string> {
+async function uploadImageAsDataUrl(file: File): Promise<string> {
   return await new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
@@ -31,10 +31,11 @@ async function uploadImage(file: File): Promise<string> {
 type Props = {
   markdown: string;
   onChange: (markdown: string) => void;
+  imageUploadHandler?: (file: File) => Promise<string>;
 };
 
 export const MDXEditorComponent = forwardRef<MDXEditorMethods, Props>(
-  ({ markdown, onChange }, ref) => {
+  ({ markdown, onChange, imageUploadHandler }, ref) => {
     const [editorModule, setEditorModule] = useState<EditorModule | null>(null);
 
     useEffect(() => {
@@ -65,7 +66,7 @@ export const MDXEditorComponent = forwardRef<MDXEditorMethods, Props>(
         thematicBreakPlugin(),
         linkPlugin(),
         linkDialogPlugin(),
-        imagePlugin({ imageUploadHandler: uploadImage }),
+        imagePlugin({ imageUploadHandler: imageUploadHandler ?? uploadImageAsDataUrl }),
         tablePlugin(),
         codeBlockPlugin({ defaultCodeBlockLanguage: "ts" }),
         codeMirrorPlugin({
@@ -99,7 +100,7 @@ export const MDXEditorComponent = forwardRef<MDXEditorMethods, Props>(
           ),
         }),
       ];
-    }, [editorModule]);
+    }, [editorModule, imageUploadHandler]);
 
     if (!editorModule || !plugins) {
       return (

@@ -16,15 +16,15 @@ Database Integration & Polish
 
 **Last Completed**
 
-Mock data detachment and DB-backed book metadata cleanup
+Public landing page at /, public reader route at /books/$bookId, and dynamic Auth-Header state
 
 **Currently Working**
 
-Backend Advisor issue review and remaining editor lint warnings
+Final polish of remaining views and lint verification
 
 **Next Milestone**
 
-Apply verified database advisor fixes from the actual advisor report
+Resolve remaining lint warnings and bundle-size follow-up
 
 ---
 
@@ -216,6 +216,7 @@ Example
 * Moved shared book parsing/navigation helpers into `src/lib/book-utils.ts`, removed live `mock-data.ts` imports from reader/editor flows, and replaced reader mock fallbacks with loading/not-found states.
 * Added creator data to book queries, batched step-count fetching, and updated home, featured, progress, profile, and my-books mappings to use DB-backed author/category/step metadata instead of fixed mock values.
 * Changed progress reset cache handling to invalidate the scoped `step-progresses` query instead of clearing every cached step-progress row for the user.
+* Hardened the Book Editor for copy-paste/import workflows by preserving imported Markdown step bodies, supporting `.md` file upload/drop in the import pane, inserting dropped Markdown files at the cursor, and routing rich-editor image uploads through InsForge attachments instead of base64 data URLs.
 
 ---
 

@@ -138,9 +138,10 @@ export const DBService = {
   async createBook(book: Omit<DBBook, "id" | "created_by">): Promise<DBBook> {
     const { data } = await insforge.auth.getCurrentUser();
     const user = data?.user;
+    console.log("DBService.createBook: getCurrentUser result:", user);
     const { data: inserted, error } = await insforge.database
       .from("books")
-      .insert({ ...book, created_by: user?.id })
+      .insert([{ ...book, created_by: user?.id }])
       .select()
       .single();
     if (error) throw error;
@@ -161,7 +162,7 @@ export const DBService = {
   async deleteBook(bookId: string): Promise<void> {
     const { error } = await insforge.database
       .from("books")
-      .update({ deleted_at: new Date().toISOString() })
+      .delete()
       .eq("id", bookId);
     if (error) throw error;
   },
@@ -234,7 +235,7 @@ export const DBService = {
   async createPhase(phase: Omit<DBPhase, "id">): Promise<DBPhase> {
     const { data, error } = await insforge.database
       .from("phases")
-      .insert(phase)
+      .insert([phase])
       .select()
       .single();
     if (error) throw error;
@@ -274,7 +275,7 @@ export const DBService = {
   async createStep(step: Omit<DBStep, "id">): Promise<DBStep> {
     const { data, error } = await insforge.database
       .from("steps")
-      .insert(step)
+      .insert([step])
       .select()
       .single();
     if (error) throw error;
@@ -317,7 +318,7 @@ export const DBService = {
     if (existing) return existing;
     const { data, error } = await insforge.database
       .from("book_progress")
-      .insert({ user_id: userId, book_id: bookId, progress_percentage: 0 })
+      .insert([{ user_id: userId, book_id: bookId, progress_percentage: 0 }])
       .select()
       .single();
     if (error) throw error;
@@ -411,7 +412,7 @@ export const DBService = {
   async followUser(followerId: string, followingId: string): Promise<void> {
     const { error } = await insforge.database
       .from("user_followers")
-      .insert({ follower_id: followerId, following_id: followingId });
+      .insert([{ follower_id: followerId, following_id: followingId }]);
     if (error) throw error;
   },
 
@@ -437,7 +438,7 @@ export const DBService = {
   async createAttachment(attachment: Omit<DBAttachment, "id">): Promise<DBAttachment> {
     const { data, error } = await insforge.database
       .from("attachments")
-      .insert(attachment)
+      .insert([attachment])
       .select()
       .single();
     if (error) throw error;
@@ -465,7 +466,7 @@ export const DBService = {
   async addBookMember(bookId: string, userId: string, role: "OWNER" | "EDITOR" | "VIEWER"): Promise<DBBookMember> {
     const { data, error } = await insforge.database
       .from("book_members")
-      .insert({ book_id: bookId, user_id: userId, role })
+      .insert([{ book_id: bookId, user_id: userId, role }])
       .select("*, users:user_id(*)")
       .single();
     if (error) throw error;

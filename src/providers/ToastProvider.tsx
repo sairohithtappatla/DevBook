@@ -61,14 +61,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const getBorderColor = (type: ToastType) => {
     switch (type) {
       case "success":
-        return "border-[#16A34A] bg-[#F0FDF4]";
+        return "border-[#16A34A] bg-[#F0FDF4] dark:border-[#22C55E] dark:bg-[#14532D]/35";
       case "warning":
-        return "border-warning bg-[#FEF3C7]";
+        return "border-warning bg-[#FEF3C7] dark:border-[#F59E0B] dark:bg-[#78350F]/35";
       case "error":
-        return "border-danger bg-[#FEE2E2]";
+        return "border-danger bg-[#FEE2E2] dark:border-[#EF4444] dark:bg-[#7F1D1D]/35";
       case "info":
       default:
-        return "border-primary bg-[#EFF6FF]";
+        return "border-primary bg-[#EFF6FF] dark:border-[#3B82F6] dark:bg-[#1E3A8A]/35";
     }
   };
 
@@ -87,13 +87,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           >
             <div className="flex items-center gap-2.5">
               {getIcon(toast.type)}
-              <span className="text-[13px] font-semibold text-text-primary font-sans leading-tight">
+              <span className="text-[13px] font-semibold text-foreground font-sans leading-tight">
                 {toast.message}
               </span>
             </div>
             <button
               onClick={() => removeToast(toast.id)}
-              className="text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
+              className="text-text-secondary hover:text-foreground transition-colors cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
             </button>
