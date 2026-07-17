@@ -39,6 +39,8 @@ type Props = {
 
 const SYNC_STORAGE_KEY = "devbook_auth_sync";
 
+import { DBService } from "@/services/db";
+
 export function AuthProvider({ children }: Props) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -97,6 +99,37 @@ export function AuthProvider({ children }: Props) {
       window.removeEventListener("storage", handleStorageChange);
     };
   }, []);
+
+  // Guarantee profile exists in database 'users' table
+  useEffect(() => {
+    if (authState === AuthState.AUTHENTICATED && user?.id) {
+      DBService.getProfile(user.id).then((profile) => {
+        if (!profile) {
+          const fallbackName = user.profile?.name || "DevBook User";
+          const username = fallbackName.toLowerCase().replace(/\s+/g, "_") + "_" + Math.floor(Math.random() * 1000);
+          const bioJson = JSON.stringify({
+            title: "Developer",
+            location: "Remote",
+            about: "Full Stack Engineer building projects.",
+            socials: { github: "", linkedin: "", portfolio: "", email: "" },
+            username,
+          });
+
+          DBService.updateProfile(user.id, {
+            name: fallbackName,
+            avatar_url: user.profile?.avatar_url || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80",
+            bio: bioJson,
+          }).then(() => {
+            console.log("Successfully auto-created user profile in users table.");
+          }).catch((err) => {
+            console.error("Error auto-creating user profile:", err);
+          });
+        }
+      }).catch((err) => {
+        console.error("Error checking user profile in users table:", err);
+      });
+    }
+  }, [authState, user]);
 
   const triggerTabSync = () => {
     localStorage.setItem(SYNC_STORAGE_KEY, Date.now().toString());

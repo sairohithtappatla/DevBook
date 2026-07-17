@@ -1,8 +1,12 @@
 import { ArrowRight } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/useToast";
 
 export type BookAuthor = {
   name: string;
   avatar_url?: string;
+  username?: string;
 };
 
 export type BookData = {
@@ -57,10 +61,26 @@ function getRelativeTimeString(dateString?: string): string {
 
 export function BookCard({ book, onClick }: BookCardProps) {
   const { title, description, steps_count, author, created_at, tags } = book;
+  const navigate = useNavigate();
 
   const category = (tags && tags[0]) || "DEVELOPMENT";
   const phasesCount = steps_count ? Math.ceil(steps_count / 3) : 0;
   const relativeDate = getRelativeTimeString(created_at);
+
+  const { isAuthenticated } = useAuth();
+  const { showToast } = useToast();
+
+  const handleAuthorClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isAuthenticated) {
+      showToast("Please login", "info");
+      navigate({ to: "/login" });
+      return;
+    }
+    if (author?.username) {
+      navigate({ to: "/profile", search: { username: author.username } });
+    }
+  };
 
   return (
     <div
@@ -88,18 +108,21 @@ export function BookCard({ book, onClick }: BookCardProps) {
       {/* Author & Date info */}
       <div className="flex items-center gap-2 pt-2 text-xs font-medium">
         {author ? (
-          <div className="flex items-center gap-2 min-w-0">
+          <div 
+            onClick={handleAuthorClick}
+            className="flex items-center gap-2 min-w-0 hover:text-primary transition-colors cursor-pointer group"
+          >
             {author.avatar_url ? (
               <img
                 src={author.avatar_url}
                 alt={author.name}
-                className="w-5 h-5 rounded-full object-cover border border-border"
+                className="w-5 h-5 rounded-full object-cover border border-border group-hover:border-primary/50 transition-colors"
               />
             ) : (
               // Stylized dot/circle avatar to mimic the green dot in the reference image
-              <div className="w-5 h-5 rounded-full bg-gradient-to-br from-emerald-300 to-teal-500 border border-border shrink-0" />
+              <div className="w-5 h-5 rounded-full bg-gradient-to-br from-emerald-300 to-teal-500 border border-border shrink-0 group-hover:border-primary/50 transition-colors" />
             )}
-            <span className="font-body text-text-primary truncate">{author.name}</span>
+            <span className="font-body text-text-primary truncate group-hover:text-primary transition-colors">{author.name}</span>
           </div>
         ) : (
           <div className="flex items-center gap-2 min-w-0">
@@ -113,8 +136,8 @@ export function BookCard({ book, onClick }: BookCardProps) {
 
       {/* Full-width Action Button */}
       <div className="mt-1 pt-1">
-        <div className="flex items-center justify-between w-full px-4 py-2 bg-slate-50 border border-slate-200/60 hover:bg-slate-100 hover:border-slate-300/80 transition-all rounded-md text-sm text-text-primary font-medium">
-          <span>Get started</span>
+        <div className="flex items-center justify-between w-full px-4 py-2 bg-slate-50 border border-slate-200/60 hover:bg-slate-100 hover:border-slate-300/80 transition-all rounded-md text-sm text-text-primary font-medium ">
+          <span className="text-black ">Get started</span>
           <ArrowRight className="w-4 h-4 text-text-secondary" />
         </div>
       </div>

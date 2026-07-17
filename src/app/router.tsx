@@ -18,11 +18,13 @@ import { BookEditorPage } from "@/routes/books/BookEditorPage";
 import { BookReaderPage } from "@/routes/books/BookReaderPage";
 import { ProgressPage } from "@/routes/progress/ProgressPage";
 import { ProfilePage } from "@/routes/profile/ProfilePage";
+import { AuthorsPage } from "@/routes/authors/AuthorsPage";
 import { LandingPage } from "@/routes/landing/LandingPage";
 import { useBook } from "@/hooks/useBooks";
 import { Loader2 } from "lucide-react";
 import { SearchProvider } from "@/providers/SearchProvider";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useToast } from "@/hooks/useToast";
 
 // 1. Root Route
 const rootRoute = createRootRoute({
@@ -45,7 +47,15 @@ const AuthenticatedLayout = () => {
   const { isInitializing, isAuthenticated } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [selectedCategory, setSelectedCategory] = useState("All");
+
+  useEffect(() => {
+    if (!isInitializing && !isAuthenticated) {
+      showToast("Please login", "info");
+      navigate({ to: "/login" });
+    }
+  }, [isInitializing, isAuthenticated, showToast, navigate]);
 
   if (isInitializing) {
     return (
@@ -57,7 +67,6 @@ const AuthenticatedLayout = () => {
   }
 
   if (!isAuthenticated) {
-    navigate({ to: "/login" });
     return null;
   }
 
@@ -66,6 +75,7 @@ const AuthenticatedLayout = () => {
   if (path === "/featured") currentTab = "featured";
   else if (path === "/books") currentTab = "books";
   else if (path === "/progress") currentTab = "progress";
+  else if (path === "/authors") currentTab = "authors";
   else if (path === "/profile") currentTab = "profile";
 
   const getRightPanelContent = () => {
@@ -88,8 +98,8 @@ const AuthenticatedLayout = () => {
           currentTab={currentTab}
           onChangeTab={(tab) => navigate({ to: tab === "home" ? "/home" : "/" + tab })}
           rightPanelContent={getRightPanelContent()}
-          showSearch={currentTab === "home" || currentTab === "featured" || currentTab === "progress" || currentTab === "profile"}
-          showTopNavigation={currentTab !== "books" && currentTab !== "progress" && currentTab !== "profile"}
+          showSearch={currentTab === "home" || currentTab === "featured" || currentTab === "progress" || currentTab === "profile" || currentTab === "authors"}
+          showTopNavigation={currentTab !== "books" && currentTab !== "progress" && currentTab !== "profile" && currentTab !== "authors"}
           title={
             currentTab === "featured"
               ? "Featured Books"
@@ -97,6 +107,8 @@ const AuthenticatedLayout = () => {
               ? "My Books"
               : currentTab === "progress"
               ? "My Progress"
+              : currentTab === "authors"
+              ? "Authors"
               : currentTab === "profile"
               ? "My Profile"
               : undefined
@@ -155,6 +167,10 @@ function ProgressRouteComponent() {
 
 function ProfileRouteComponent() {
   return <ProfilePage />;
+}
+
+function AuthorsRouteComponent() {
+  return <AuthorsPage />;
 }
 
 // 5. Reader & Editor Routes Components
@@ -225,6 +241,12 @@ const profileRoute = createRoute({
   component: ProfileRouteComponent,
 });
 
+const authorsRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/authors",
+  component: AuthorsRouteComponent,
+});
+
 const readerRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/books/$bookId",
@@ -246,6 +268,7 @@ const routeTree = rootRoute.addChildren([
     featuredRoute,
     booksRoute,
     progressRoute,
+    authorsRoute,
     profileRoute,
   ]),
   readerRoute,

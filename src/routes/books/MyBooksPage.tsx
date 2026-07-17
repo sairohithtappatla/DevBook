@@ -137,12 +137,14 @@ export function MyBooksPage({
     await Promise.all([refetchBooks(), refetchCounts()]);
   };
 
-  const books = useMemo(
-    () => dbBooks.map((book) => mapDBBookToBookItem(book, stepCounts)),
-    [dbBooks, stepCounts],
-  );
-  const createBookMutation = useCreateBook();
   const { user } = useAuth();
+  const books = useMemo(() => {
+    if (!user?.id) return [];
+    return dbBooks
+      .filter((book) => book.created_by === user.id)
+      .map((book) => mapDBBookToBookItem(book, stepCounts));
+  }, [dbBooks, stepCounts, user?.id]);
+  const createBookMutation = useCreateBook();
   const deleteBookMutation = useDeleteBook();
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);

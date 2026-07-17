@@ -60,6 +60,10 @@ export function useFollowUser() {
         queryClient.setQueryData(["followers", variables.followingId], context.previousFollowers);
       }
     },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["following", variables.followerId] });
+      queryClient.invalidateQueries({ queryKey: ["followers", variables.followingId] });
+    },
   });
 }
 
@@ -94,6 +98,10 @@ export function useUnfollowUser() {
       if (context?.previousFollowers) {
         queryClient.setQueryData(["followers", variables.followingId], context.previousFollowers);
       }
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["following", variables.followerId] });
+      queryClient.invalidateQueries({ queryKey: ["followers", variables.followingId] });
     },
   });
 }

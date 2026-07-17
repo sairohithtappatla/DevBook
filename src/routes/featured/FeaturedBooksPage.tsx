@@ -8,6 +8,18 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useBooks, useBookStepCounts } from "@/hooks/useBooks";
 
 function mapDBBookToBookData(dbBook: any, stepCounts?: Record<string, number>): BookData {
+  let username = (dbBook.creator?.name || "user").toLowerCase().replace(/\s+/g, "_");
+  try {
+    if (dbBook.creator?.bio?.startsWith("{")) {
+      const parsed = JSON.parse(dbBook.creator.bio);
+      if (parsed.username) {
+        username = parsed.username;
+      }
+    }
+  } catch (e) {
+    // Ignore
+  }
+
   return {
     id: dbBook.id,
     title: dbBook.title,
@@ -16,7 +28,8 @@ function mapDBBookToBookData(dbBook: any, stepCounts?: Record<string, number>): 
     steps_count: stepCounts?.[dbBook.id] || 0,
     author: {
       name: dbBook.creator?.name || "Unknown Author",
-      avatar_url: dbBook.creator?.avatar_url || "https://api.dicebear.com/9.x/glass/svg?seed=creator"
+      avatar_url: dbBook.creator?.avatar_url || "https://api.dicebear.com/9.x/glass/svg?seed=creator",
+      username
     },
     created_at: dbBook.created_at,
     tags: dbBook.tags

@@ -1,5 +1,4 @@
-import { useRef, useEffect, useMemo, useState } from "react";
-import { BookDetailsModal } from "@/components/modals/BookDetailsModal";
+import { useRef, useEffect, useMemo,useState } from "react";
 import { motion, useMotionValue, useSpring } from "framer-motion";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Section } from "@/components/ui/Section";
@@ -13,9 +12,19 @@ import { TopCreatorsWidget } from "@/components/home/TopCreatorsWidget";
 import { CreateBookCTA } from "@/components/home/CreateBookCTA";
 import { useBooks, useBookStepCounts } from "@/hooks/useBooks";
 
-import type { BookData as ModalBookData } from "@/components/modals/BookDetailsModal";
-
 function mapDBBookToBookData(dbBook: any, stepCounts?: Record<string, number>): BookData {
+  let username = (dbBook.creator?.name || "user").toLowerCase().replace(/\s+/g, "_");
+  try {
+    if (dbBook.creator?.bio?.startsWith("{")) {
+      const parsed = JSON.parse(dbBook.creator.bio);
+      if (parsed.username) {
+        username = parsed.username;
+      }
+    }
+  } catch (e) {
+    // Ignore
+  }
+
   return {
     id: dbBook.id,
     title: dbBook.title,
@@ -24,31 +33,14 @@ function mapDBBookToBookData(dbBook: any, stepCounts?: Record<string, number>): 
     steps_count: stepCounts?.[dbBook.id] || 0,
     author: {
       name: dbBook.creator?.name || "Unknown Author",
-      avatar_url: dbBook.creator?.avatar_url || "https://api.dicebear.com/9.x/glass/svg?seed=creator"
+      avatar_url: dbBook.creator?.avatar_url || "https://api.dicebear.com/9.x/glass/svg?seed=creator",
+      username
     },
     created_at: dbBook.created_at,
     tags: dbBook.tags
   };
 }
 
-function mapDBBookToModalBookData(dbBook: any, stepCounts?: Record<string, number>): ModalBookData {
-  return {
-    id: dbBook.id,
-    title: dbBook.title,
-    description: dbBook.description || "",
-    coverType: dbBook.cover_url || "workflow",
-    difficulty: dbBook.difficulty === "BEGINNER" ? "Beginner" : dbBook.difficulty === "INTERMEDIATE" ? "Intermediate" : "Advanced",
-    estimatedTime: `${dbBook.estimated_read_time || 60} mins`,
-    stepsCount: stepCounts?.[dbBook.id] || 0,
-    tags: dbBook.tags || [],
-    category: dbBook.tags?.[0] || "Uncategorized",
-    author: {
-      name: dbBook.creator?.name || "Unknown Author",
-      avatar: dbBook.creator?.avatar_url || "https://api.dicebear.com/9.x/glass/svg?seed=creator",
-      role: ""
-    }
-  };
-}
 
 type HomePageProps = {
   selectedCategory: string;
@@ -161,7 +153,6 @@ export function HomePage({
   const bookIds = useMemo(() => dbBooks.map((b) => b.id), [dbBooks]);
   const { data: stepCounts } = useBookStepCounts(bookIds);
 
-  const [selectedBookForDetails, setSelectedBookForDetails] = useState<ModalBookData | null>(null);
   const { searchQuery } = useSearch();
   const isLargeDesktop = useMediaQuery("(min-width: 1280px)");
 
@@ -212,7 +203,7 @@ export function HomePage({
         action={
           <button
             onClick={onExploreBooks}
-            className="text-sm font-black text-white hover:text-white flex items-center gap-1 transition-colors cursor-pointer"
+            className="text-sm font-black text-blue-700 flex items-center gap-1 transition-colors cursor-pointer"
           >
             View all &rarr;
           </button>
@@ -222,28 +213,13 @@ export function HomePage({
         <FramerCarousel
           books={filteredBooks}
           onBookSelect={(book) => {
-            const dbBook = dbBooks.find(b => b.id === book.id);
-            if (dbBook) {
-              setSelectedBookForDetails(mapDBBookToModalBookData(dbBook, stepCounts));
-            }
+            onBookSelect?.(book);
           }}
         />
       </Section>
 
       {/* Responsive Inline Widgets for Tablet/Mobile */}
       {renderInlineWidgets()}
-
-      <BookDetailsModal
-        isOpen={selectedBookForDetails !== null}
-        onClose={() => setSelectedBookForDetails(null)}
-        book={selectedBookForDetails}
-        onStartReading={() => {
-          if (selectedBookForDetails) {
-            onBookSelect?.(selectedBookForDetails);
-            setSelectedBookForDetails(null);
-          }
-        }}
-      />
     </PageContainer>
   );
 }

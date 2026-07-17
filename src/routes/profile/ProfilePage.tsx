@@ -17,6 +17,7 @@ import { useFollowers, useFollowing, useFollowUser, useUnfollowUser } from "@/ho
 import { PageContainer } from "@/components/layout/PageContainer";
 import { BookCard, type BookData } from "@/components/books/BookCard";
 import { useToast } from "@/hooks/useToast";
+import { useSearch as useRouteSearch, useNavigate } from "@tanstack/react-router";
 
 export type Socials = { github: string; linkedin: string; portfolio: string; email: string };
 export type ProfileData = {
@@ -90,6 +91,18 @@ const SOCIAL_FIELDS: {
   ];
 
 function mapDBBookToBookData(dbBook: any, stepCounts?: Record<string, number>): BookData {
+  let username = (dbBook.creator?.name || "user").toLowerCase().replace(/\s+/g, "_");
+  try {
+    if (dbBook.creator?.bio?.startsWith("{")) {
+      const parsed = JSON.parse(dbBook.creator.bio);
+      if (parsed.username) {
+        username = parsed.username;
+      }
+    }
+  } catch (e) {
+    // Ignore
+  }
+
   return {
     id: dbBook.id,
     title: dbBook.title,
@@ -98,7 +111,8 @@ function mapDBBookToBookData(dbBook: any, stepCounts?: Record<string, number>): 
     steps_count: stepCounts?.[dbBook.id] || 0,
     author: {
       name: dbBook.creator?.name || "Unknown Author",
-      avatar_url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80"
+      avatar_url: dbBook.creator?.avatar_url || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80",
+      username
     },
     created_at: dbBook.created_at,
     tags: dbBook.tags
@@ -113,7 +127,15 @@ export function ProfilePage() {
   const { data: stepCounts } = useBookStepCounts(bookIds);
   const { data: dbProfiles = [] } = useAllProfiles();
 
-  const [activeUsername, setActiveUsername] = useState<string>("me");
+  const navigate = useNavigate();
+  const search = useRouteSearch({ strict: false });
+  const searchUsername = (search as any).username || "me";
+
+  const [activeUsername, setActiveUsername] = useState<string>(searchUsername);
+
+  useEffect(() => {
+    setActiveUsername(searchUsername);
+  }, [searchUsername]);
 
   // Parse JSON-encoded bio fields or fallback to defaults
   const parseBio = (dbProfile: any, fallbackName: string, fallbackAvatar: string) => {
@@ -196,7 +218,12 @@ export function ProfilePage() {
   const { data: dbFollowing = [] } = useFollowing(targetUserId);
 
   const following = useMemo(() => {
-    return myFollowing.map((p) => (p.name || "user").toLowerCase().replace(/\s+/g, "_"));
+    return myFollowing.map((p) => {
+      const fallbackName = p.name || "Unknown Author";
+      const fallbackAvatar = p.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80";
+      const parsed = parseBio(p, fallbackName, fallbackAvatar);
+      return parsed.username;
+    });
   }, [myFollowing]);
 
   const updateMe = (patch: Partial<ProfileData>, options?: { onSuccess?: () => void }) => {
@@ -248,17 +275,31 @@ export function ProfilePage() {
     );
     if (!targetProfile) return;
 
-    const isFollowing = myFollowing.some((x) => x.id === targetProfile.id);
+    const isFollowing = following.includes(targetUsername);
     if (isFollowing) {
-      unfollowMutation.mutate({ followerId: user.id, followingId: targetProfile.id });
+      unfollowMutation.mutate({ followerId: user.id, followingId: targetProfile.id }, {
+        onSuccess: () => {
+          showToast(`Unfollowed ${targetProfile.name || "user"} successfully`, "success");
+        },
+        onError: (err: any) => {
+          showToast(`Failed to unfollow: ${err.message || err}`, "error");
+        }
+      });
     } else {
-      followMutation.mutate({ followerId: user.id, followingId: targetProfile.id });
+      followMutation.mutate({ followerId: user.id, followingId: targetProfile.id }, {
+        onSuccess: () => {
+          showToast(`Following ${targetProfile.name || "user"} successfully`, "success");
+        },
+        onError: (err: any) => {
+          showToast(`Failed to follow: ${err.message || err}`, "error");
+        }
+      });
     }
   };
 
   // Determine current active profile to view
   const currentProfile = useMemo(() => {
-    if (activeUsername === "me") {
+    if (activeUsername === "me" || activeUsername === me.username) {
       return {
         id: user?.id || "me",
         username: me.username || "you",
@@ -306,12 +347,14 @@ export function ProfilePage() {
   // Followers list for target profile
   const followersList = useMemo(() => {
     return dbFollowers.map((p) => {
-      const username = (p.name || "user").toLowerCase().replace(/\s+/g, "_");
+      const fallbackName = p.name || "Unknown Author";
+      const fallbackAvatar = p.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80";
+      const parsed = parseBio(p, fallbackName, fallbackAvatar);
       return {
-        username,
-        name: p.name || "Unknown Author",
-        avatar: p.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80",
-        bio: p.bio || "Full Stack Engineer building projects.",
+        username: parsed.username,
+        name: parsed.name,
+        avatar: parsed.avatar,
+        bio: parsed.about,
       };
     });
   }, [dbFollowers]);
@@ -319,12 +362,14 @@ export function ProfilePage() {
   // Following list for target profile
   const followingList = useMemo(() => {
     return dbFollowing.map((p) => {
-      const username = (p.name || "user").toLowerCase().replace(/\s+/g, "_");
+      const fallbackName = p.name || "Unknown Author";
+      const fallbackAvatar = p.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80";
+      const parsed = parseBio(p, fallbackName, fallbackAvatar);
       return {
-        username,
-        name: p.name || "Unknown Author",
-        avatar: p.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80",
-        bio: p.bio || "Full Stack Engineer building projects.",
+        username: parsed.username,
+        name: parsed.name,
+        avatar: parsed.avatar,
+        bio: parsed.about,
       };
     });
   }, [dbFollowing]);
@@ -339,13 +384,13 @@ export function ProfilePage() {
     <PageContainer className="flex flex-col justify-start pb-6">
       {/* Top breadcrumbs */}
       <div className="text-xs text-text-secondary select-none font-mono flex items-center gap-1.5 opacity-80">
-        <span className="hover:text-primary transition-colors cursor-pointer" onClick={() => setActiveUsername("me")}>devbook</span>
+        <span className="hover:text-primary transition-colors cursor-pointer" onClick={() => navigate({ to: "/profile" })}>devbook</span>
         <span className="text-text-secondary/40 font-normal">/</span>
-        <span className="hover:text-primary transition-colors cursor-pointer" onClick={() => setActiveUsername("me")}>profile</span>
+        <span className="hover:text-primary transition-colors cursor-pointer" onClick={() => navigate({ to: "/profile" })}>profile</span>
         <span className="text-text-secondary/40 font-normal">/</span>
         <span
           className={`transition-colors cursor-pointer ${activeUsername === "me" ? "text-text-primary font-medium" : "hover:text-primary"}`}
-          onClick={() => setActiveUsername("me")}
+          onClick={() => navigate({ to: "/profile" })}
         >
           me
         </span>
@@ -366,7 +411,9 @@ export function ProfilePage() {
         following={followingList}
         toggleFollow={toggleFollow}
         followingUsernames={following}
-        onSelectUser={setActiveUsername}
+        onSelectUser={(username) => {
+          navigate({ to: "/profile", search: { username } });
+        }}
       />
 
       {userBooks.length > 0 && (
@@ -704,7 +751,7 @@ export function ProfileView({
                 onClick={() => toggleFollow(profile.username)}
                 className={`w-full text-center rounded-lg px-3 py-1.5 text-xs font-semibold cursor-pointer transition-all shadow-xs ${isFollowing
                   ? "border border-border text-text-primary bg-surface hover:bg-surface-secondary"
-                  : " text hover:bg-primary/"
+                  : "bg-primary text-primary-foreground hover:bg-primary/90"
                   }`}
               >
                 {isFollowing ? "Unfollow" : "Follow"}

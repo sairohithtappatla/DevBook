@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { insforge } from "@/lib/insforge";
+import { useTheme } from "@/stores/theme";
 import {
   BookOpen,
   CheckCircle2,
@@ -45,7 +46,7 @@ type AuthMode = "login" | "signup" | "forgot-password";
 
 export function LoginPage() {
   const { signIn, signUp, verifyEmail, forgotPassword, exchangeResetCode, resetPassword } = useAuth();
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [theme, setTheme] = useTheme();
   const [mode, setMode] = useState<AuthMode>("login");
   const [showPassword, setShowPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -358,7 +359,7 @@ export function LoginPage() {
             type="button"
             onClick={() => setTheme(isDark ? "light" : "dark")}
             aria-label="Toggle theme"
-            className="group absolute right-6 top-6 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-surface text-text-primary shadow-xs transition-all duration-300 ease-in-out hover:bg-surface-secondary hover:shadow-md hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-primary overflow-hidden"
+            className="group absolute right-6 top-6 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-surface text-text-primary shadow-xs transition-all duration-300 ease-in-out hover:bg-surface-secondary hover:shadow-md hover:scale-105 active:scale-95 focus:outline-none focus:ring-0 overflow-hidden"
           >
             <div className="relative h-4.5 w-4.5">
               <Sun
