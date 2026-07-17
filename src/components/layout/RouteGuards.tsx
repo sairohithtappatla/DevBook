@@ -1,6 +1,6 @@
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { LoginPage } from "@/routes/login/LoginPage";
+import { useNavigate } from "@tanstack/react-router";
 
 type GuardProps = {
   children: ReactNode;
@@ -8,18 +8,20 @@ type GuardProps = {
 
 /**
  * Route guard that requires the user to be signed in.
- * If not authenticated, it renders the login page.
- * If authenticated but email is unverified, it renders the login page (which handles OTP verification).
+ * If not authenticated or not verified, redirects to the login page.
  */
 export function ProtectedRoute({ children }: GuardProps) {
   const { isAuthenticated, isEmailVerified } = useAuth();
+  const navigate = useNavigate();
 
-  if (!isAuthenticated) {
-    return <LoginPage />;
-  }
+  useEffect(() => {
+    if (!isAuthenticated || !isEmailVerified) {
+      navigate({ to: "/login" });
+    }
+  }, [isAuthenticated, isEmailVerified, navigate]);
 
-  if (!isEmailVerified) {
-    return <LoginPage />;
+  if (!isAuthenticated || !isEmailVerified) {
+    return null;
   }
 
   return <>{children}</>;
@@ -27,23 +29,20 @@ export function ProtectedRoute({ children }: GuardProps) {
 
 /**
  * Route guard for public-only pages (like login/register).
- * If the user is authenticated and verified, it redirects to the main app dashboard.
- * If authenticated but unverified, it renders the verify email page.
+ * If the user is authenticated and verified, redirects to the main app dashboard.
  */
 export function PublicRoute({ children }: GuardProps) {
   const { isAuthenticated, isEmailVerified } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isAuthenticated && isEmailVerified) {
+      navigate({ to: "/home" });
+    }
+  }, [isAuthenticated, isEmailVerified, navigate]);
 
   if (isAuthenticated && isEmailVerified) {
-    // Render the mock dashboard when authenticated.
-    return (
-      <ProtectedRoute>
-        {children}
-      </ProtectedRoute>
-    );
-  }
-
-  if (isAuthenticated && !isEmailVerified) {
-    return <LoginPage />;
+    return null;
   }
 
   return <>{children}</>;
@@ -55,9 +54,16 @@ export function PublicRoute({ children }: GuardProps) {
  */
 export function EmailVerifiedRoute({ children }: GuardProps) {
   const { isAuthenticated, isEmailVerified } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isAuthenticated && !isEmailVerified) {
+      navigate({ to: "/login" });
+    }
+  }, [isAuthenticated, isEmailVerified, navigate]);
 
   if (isAuthenticated && !isEmailVerified) {
-    return <LoginPage />;
+    return null;
   }
 
   return <>{children}</>;
