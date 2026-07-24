@@ -97,7 +97,7 @@ const SortableItem = memo(function SortableItem({
       }}
       className="group flex items-center gap-2 rounded-md border border-hairline bg-surface-2 px-2 py-1.5 text-sm hover:border-foreground/20"
     >
-      <div {...attributes} {...listeners} className="cursor-grab select-none text-muted-foreground/60 active:cursor-grabbing">
+      <div {...attributes} {...listeners} className="cursor-grab select-none text-muted-foreground/60 active:cursor-grabbing touch-none" style={{ touchAction: "none" }}>
         ⋮⋮
       </div>
       {isEditing ? (

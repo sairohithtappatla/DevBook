@@ -36,7 +36,7 @@ const EMPTY_BOOK: Book = {
 
 export function BookReaderPage({ bookId, onBack, onEdit }: Props) {
   const { data: dbBook, isLoading: isBookLoading } = useBook(bookId);
-  const { data: dbBookStructure } = useBookStructure(bookId);
+  const { data: dbBookStructure } = useBookStructure(bookId, true);
   const markLast = useProgress((s) => s.markLast);
 
   // Map dbBook and dbBookStructure to match standard Book structure
@@ -340,35 +340,63 @@ const OnThisPage = memo(function OnThisPage({ headings }: OnThisPageProps) {
 
     if (headings.length === 0) return;
 
-    const observedElements = headings
-      .map((heading) => document.getElementById(heading.id))
-      .filter((element): element is HTMLElement => Boolean(element));
+    let observer: IntersectionObserver | null = null;
+    let animFrame: number;
 
-    if (observedElements.length === 0) return;
+    const setupObserver = () => {
+      const observedElements = headings
+        .map((heading) => document.getElementById(heading.id))
+        .filter((element): element is HTMLElement => Boolean(element));
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            visibleHeadingIds.current.add(entry.target.id);
-          } else {
-            visibleHeadingIds.current.delete(entry.target.id);
-          }
+      if (observedElements.length > 0) {
+        observer = new IntersectionObserver(
+          (entries) => {
+            for (const entry of entries) {
+              if (entry.isIntersecting) {
+                visibleHeadingIds.current.add(entry.target.id);
+              } else {
+                visibleHeadingIds.current.delete(entry.target.id);
+              }
+            }
+
+            const nextActiveHeading = headings.find((heading) => visibleHeadingIds.current.has(heading.id))?.id;
+            if (nextActiveHeading) {
+              setActiveHeading((current) => (current === nextActiveHeading ? current : nextActiveHeading));
+            }
+          },
+          {
+            rootMargin: "-90px 0px -55% 0px",
+            threshold: 0,
+          },
+        );
+
+        observedElements.forEach((element) => observer?.observe(element));
+      }
+    };
+
+    animFrame = requestAnimationFrame(setupObserver);
+
+    const handleScroll = () => {
+      const scrollPos = window.scrollY + 130;
+      let currentId = headings[0]?.id;
+      for (const h of headings) {
+        const el = document.getElementById(h.id);
+        if (el && el.offsetTop <= scrollPos) {
+          currentId = h.id;
         }
+      }
+      if (currentId) {
+        setActiveHeading((prev) => (prev === currentId ? prev : currentId));
+      }
+    };
 
-        const nextActiveHeading = headings.find((heading) => visibleHeadingIds.current.has(heading.id))?.id;
-        if (nextActiveHeading) {
-          setActiveHeading((current) => (current === nextActiveHeading ? current : nextActiveHeading));
-        }
-      },
-      {
-        rootMargin: "-110px 0px -65% 0px",
-        threshold: 0,
-      },
-    );
+    window.addEventListener("scroll", handleScroll, { passive: true });
 
-    observedElements.forEach((element) => observer.observe(element));
-    return () => observer.disconnect();
+    return () => {
+      cancelAnimationFrame(animFrame);
+      observer?.disconnect();
+      window.removeEventListener("scroll", handleScroll);
+    };
   }, [headings]);
 
   return (

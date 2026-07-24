@@ -278,18 +278,26 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
 
       if (activeStepFound && activeStepRef) {
         const currentMarkdown = markdownRef.current;
+        let stepPos = 1;
+        const p = phasesRef.current.find((ph) => ph.id === activeStepRef.phaseId);
+        if (p) {
+          const idx = p.steps.findIndex((s) => s.id === activeStepRef.stepId);
+          if (idx !== -1) stepPos = idx + 1;
+        }
+
         await updateStepMutation.mutateAsync({
           stepId: activeStepFound.id,
           phaseId: activeStepRef.phaseId,
           bookId,
           updates: {
             title: activeStepFound.title,
-            position: 1,
+            position: stepPos,
             content: {
               slug: activeStepFound.slug,
               markdown: currentMarkdown,
+              publishedMarkdown: (activeStepFound as any).publishedMarkdown,
               description: activeStepFound.description,
-              status: activeStepFound.status,
+              status: activeStepFound.status === "Published" ? "Published" : "Draft",
               difficulty: activeStepFound.difficulty,
               estimatedTime: activeStepFound.estimatedTime,
               visibility: activeStepFound.visibility,
@@ -366,7 +374,14 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
   }, []);
 
   // Drag and Drop phases (batched reordering via Promise.all)
-  const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
   const onDragEnd = useCallback(async (e: DragEndEvent) => {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
@@ -552,26 +567,34 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
   const confirmPublish = async () => {
     if (issues && issues.some((i) => i.kind === "mermaid")) return;
     try {
-      if (activeStep) {
-        await updateStepMutation.mutateAsync({
-          stepId: activeStep.id,
-          phaseId: activeStepRef!.phaseId,
-          updates: {
-            title: activeStep.title,
-            position: 1,
-            content: {
-              slug: activeStep.slug,
-              markdown: activeStep.markdown,
-              description: activeStep.description,
-              status: "Published",
-              difficulty: activeStep.difficulty,
-              estimatedTime: activeStep.estimatedTime,
-              visibility: activeStep.visibility,
+      for (const p of phases) {
+        for (let idx = 0; idx < p.steps.length; idx++) {
+          const s = p.steps[idx];
+          const isCurrentActive = activeStepRef?.stepId === s.id;
+          const finalMarkdown = isCurrentActive ? markdownRef.current : s.markdown;
+
+          await updateStepMutation.mutateAsync({
+            stepId: s.id,
+            phaseId: p.id,
+            bookId,
+            updates: {
+              title: s.title,
+              position: idx + 1,
+              content: {
+                slug: s.slug,
+                markdown: finalMarkdown,
+                publishedMarkdown: finalMarkdown,
+                description: s.description,
+                status: "Published",
+                difficulty: s.difficulty,
+                estimatedTime: s.estimatedTime,
+                visibility: s.visibility,
+              },
             },
-          },
-        });
+          });
+        }
       }
-      
+
       // Publish the book itself in the database
       await updateBookMutation.mutateAsync({
         bookId,

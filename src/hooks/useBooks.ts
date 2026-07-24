@@ -97,10 +97,10 @@ export function useDeleteBook() {
   });
 }
 
-export function useBookStructure(bookId: string | null) {
+export function useBookStructure(bookId: string | null, isReaderView = false) {
   return useQuery({
-    queryKey: ["book-structure", bookId],
-    queryFn: () => (bookId ? DBService.getBookStructure(bookId) : Promise.resolve([])),
+    queryKey: ["book-structure", bookId, isReaderView ? "reader" : "editor"],
+    queryFn: () => (bookId ? DBService.getBookStructure(bookId, isReaderView) : Promise.resolve([])),
     enabled: !!bookId,
   });
 }

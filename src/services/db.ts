@@ -63,6 +63,7 @@ export interface DBStep {
   content: {
     slug?: string;
     markdown?: string;
+    publishedMarkdown?: string;
     description?: string;
     status?: "Published" | "Draft" | "Archived";
     difficulty?: "Beginner" | "Intermediate" | "Advanced";
@@ -182,7 +183,7 @@ export const DBService = {
     return counts;
   },
 
-  async getBookStructure(bookId: string) {
+  async getBookStructure(bookId: string, isReaderView = false) {
     const phases = await this.getPhases(bookId);
     if (phases.length === 0) return [];
 
@@ -206,17 +207,22 @@ export const DBService = {
       return {
         id: p.id,
         title: p.title,
-        steps: steps.map((s: DBStep) => ({
-          id: s.id,
-          title: s.title,
-          slug: s.content?.slug || "",
-          markdown: s.content?.markdown || "",
-          description: s.content?.description || "",
-          status: s.content?.status || "Draft",
-          difficulty: s.content?.difficulty || "Beginner",
-          estimatedTime: s.content?.estimatedTime || 10,
-          visibility: s.content?.visibility || "Public"
-        }))
+        steps: steps.map((s: DBStep) => {
+          const publishedMd = s.content?.publishedMarkdown;
+          const currentMd = s.content?.markdown || "";
+          return {
+            id: s.id,
+            title: s.title,
+            slug: s.content?.slug || "",
+            markdown: isReaderView && publishedMd !== undefined ? publishedMd : currentMd,
+            publishedMarkdown: publishedMd,
+            description: s.content?.description || "",
+            status: s.content?.status || "Draft",
+            difficulty: s.content?.difficulty || "Beginner",
+            estimatedTime: s.content?.estimatedTime || 10,
+            visibility: s.content?.visibility || "Public"
+          };
+        })
       };
     });
   },
