@@ -239,9 +239,13 @@ export const DBService = {
   },
 
   async createPhase(phase: Omit<DBPhase, "id">): Promise<DBPhase> {
+    const existing = await this.getPhases(phase.book_id);
+    const maxPos = existing.reduce((max, p) => Math.max(max, p.position || 0), 0);
+    const nextPhase = { ...phase, position: maxPos + 1 };
+
     const { data, error } = await insforge.database
       .from("phases")
-      .insert([phase])
+      .insert([nextPhase])
       .select()
       .single();
     if (error) throw error;
@@ -279,9 +283,13 @@ export const DBService = {
   },
 
   async createStep(step: Omit<DBStep, "id">): Promise<DBStep> {
+    const existing = await this.getSteps(step.phase_id);
+    const maxPos = existing.reduce((max, s) => Math.max(max, s.position || 0), 0);
+    const nextStep = { ...step, position: maxPos + 1 };
+
     const { data, error } = await insforge.database
       .from("steps")
-      .insert([step])
+      .insert([nextStep])
       .select()
       .single();
     if (error) throw error;

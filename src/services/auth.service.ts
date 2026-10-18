@@ -128,16 +128,16 @@ export const AuthService = {
   },
 
   async getCurrentUser(): Promise<{ user: User | null }> {
-    const { data, error } = await insforge.auth.getCurrentUser();
-    if (error) {
-      // 401 Unauthorized or lack of refresh token means the guest is not logged in.
-      if (error.statusCode === 401 || error.message?.includes("No refresh token")) {
+    try {
+      const { data, error } = await insforge.auth.getCurrentUser();
+      if (error) {
         return { user: null };
       }
-      throw mapError(error);
+      return {
+        user: data?.user ? mapUser(data.user) : null,
+      };
+    } catch {
+      return { user: null };
     }
-    return {
-      user: data?.user ? mapUser(data.user) : null,
-    };
   },
 };

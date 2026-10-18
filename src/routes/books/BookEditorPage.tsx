@@ -411,11 +411,12 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
   const addPhase = useCallback(async () => {
     const title = `Phase ${phases.length} · Untitled`;
     try {
-      await createPhaseMutation.mutateAsync({
+      const created = await createPhaseMutation.mutateAsync({
         book_id: bookId,
         title,
         position: phases.length + 1,
       });
+      setPhases((prev) => [...prev, { id: created.id, title: created.title, steps: [] }]);
       showToast("Phase created", "success");
     } catch (err: any) {
       console.error("Create phase error:", err);
@@ -432,6 +433,7 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
 
     try {
       await deletePhaseMutation.mutateAsync({ phaseId, bookId });
+      setPhases((prev) => prev.filter((x) => x.id !== phaseId));
       showToast("Phase deleted", "info");
     } catch (err) {
       showToast("Failed to delete phase", "error");
@@ -461,6 +463,31 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
         content,
         bookId,
       });
+
+      const newStepNode: StepNode = {
+        id: created.id,
+        title: created.title,
+        slug: content.slug,
+        markdown: content.markdown,
+        description: content.description,
+        status: content.status,
+        difficulty: content.difficulty,
+        estimatedTime: content.estimatedTime,
+        visibility: content.visibility,
+      };
+
+      setPhases((prev) =>
+        prev.map((p) => {
+          if (p.id === phaseId) {
+            return {
+              ...p,
+              steps: [...p.steps, newStepNode],
+            };
+          }
+          return p;
+        })
+      );
+
       setActiveStepRef({ phaseId, stepId: created.id });
       showToast("Step created", "success");
     } catch (err: any) {

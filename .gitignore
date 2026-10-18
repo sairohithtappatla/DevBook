@@ -19,9 +19,10 @@ dist-ssr
 .DS_Store
 *.suo
 *.ntvs*
-*.njsproj
 *.sln
 *.sw?
+.env
+.env.*
 
 # InsForge & AI agent skills
 .insforge
