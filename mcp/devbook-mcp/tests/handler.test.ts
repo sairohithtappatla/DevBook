@@ -452,3 +452,30 @@ Deno.test("publish_draft: a stored title with surrounding spaces can be confirme
   const done = await tool(env, env.tok.owner, "publish_draft", { step_id: ID.s2, confirm: true, confirmation_token: pv.confirmation_token, confirm_title: "Padded Title" });
   assertEquals(done.isError, undefined, done.text);
 });
+
+Deno.test("store: unique-violation detection accepts the SQLSTATE or the wording; other errors are BACKEND", async () => {
+  const { createInsforgeStore, StoreError } = await import("../handler.ts");
+  const mk = (firstError: { code?: string; message?: string; details?: string } | null) => {
+    let inserts = 0;
+    const row = { id: "x", phase_id: "p", title: "t", position: 2, content: {}, updated_at: "2026-10-18T10:00:00.000001+00:00" };
+    // deno-lint-ignore no-explicit-any
+    const builder = (table: string): any => {
+      const b: any = { select: () => b, eq: () => b, order: () => b, limit: () => Promise.resolve({ data: [{ position: 1 }], error: null }), insert: () => { inserts++; return b; }, single: () => Promise.resolve(inserts === 1 && firstError ? { data: null, error: firstError } : { data: row, error: null }) };
+      void table; return b;
+    };
+    return { store: createInsforgeStore({ from: builder }), inserts: () => inserts };
+  };
+  for (const err of [{ code: "23505" }, { message: "duplicate key value violates unique constraint" }, { details: "Key (phase_id, position)=(p, 2) already exists." }]) {
+    const m = mk(err); await m.store.insertStep("p", "t", {}, "u"); assertEquals(m.inserts(), 2, JSON.stringify(err));
+  }
+  const m = mk({ code: "42501", message: "permission denied" });
+  let thrown: unknown; try { await m.store.insertStep("p", "t", {}, "u"); } catch (e) { thrown = e; }
+  assert(thrown instanceof StoreError && thrown.code === "BACKEND"); assertEquals(m.inserts(), 1);
+});
+Deno.test("rate limiter: exceeding the bucket map size keeps throttled callers throttled (evicts the least throttled bucket)", () => {
+  const t = { v: 0 };
+  const rl = new RateLimiter(() => t.v, { read: 5, write: 1 });
+  assert(rl.take("victim", "write")); assert(!rl.take("victim", "write")); // victim is now throttled
+  for (let i = 0; i < 6000; i++) rl.take(`t${i}`, "read");
+  assert(!rl.take("victim", "write"), "a flood of other tokens must not reset the victim's bucket");
+});

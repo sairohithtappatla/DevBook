@@ -1,0 +1,10 @@
+# Line endings for the proposals and the MCP server: scripts and patches break when a Windows checkout converts them to CRLF.
+# (Applying website patches onto a CRLF working tree: use `git apply --ignore-whitespace`.)
+*.sh   text eol=lf
+*.patch text eol=lf
+*.sql  text eol=lf
+*.mjs  text eol=lf
+*.ts   text eol=lf
+*.tsx  text eol=lf
+*.json text eol=lf
+*.md   text eol=lf

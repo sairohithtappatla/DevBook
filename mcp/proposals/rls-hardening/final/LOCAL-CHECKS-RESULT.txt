@@ -1,4 +1,4 @@
-Local checks, 2026-10-18T11:32Z. Disposable native PostgreSQL 18.4 on 127.0.0.1; Deno 2.9.6; website checks on a throwaway copy of v2's src/ with both reader patches applied. No InsForge project, no remote database, no network service other than package downloads.
+Local checks, 2026-10-18T17:34Z. Disposable native PostgreSQL 18.4 on 127.0.0.1; Deno 2.9.6; website checks on a throwaway copy of v2's src/ with both reader patches applied. No InsForge project, no remote database.
 Command: PG_MODULE=... PGPORT=54329 DENO=... DENO_DIR=... FE_NODE_MODULES=... PARSER_DIR=... bash mcp/proposals/rls-hardening/final/run-local-checks.sh
 
 ================ RESULT ================
@@ -6,6 +6,7 @@ PASS  local PostgreSQL reachable on 127.0.0.1:54329
 PASS  SQL parses (final set, rollbacks, mcp_tokens)
 PASS  04_helper_guard.sql is in sync with 01/02 (check-04-drift.mjs)
 PASS  RLS matrix: baseline vs final 01-04, rollback restores everything (final/sandbox/run.mjs)
+PASS  04 guard also fires without a role switch when a JWT subject exists (final/sandbox/guard-no-role.mjs)
 PASS  F3: a user cannot create a book owned by someone else (final/sandbox/insert-books.mjs)
 PASS  can_manage_members recursion reproduced and fixed (final/sandbox/recursion.mjs)
 PASS  lifecycle + function privileges, default and restrictive grants (sandbox/lifecycle.mjs)

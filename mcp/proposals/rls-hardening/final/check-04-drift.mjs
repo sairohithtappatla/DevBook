@@ -7,10 +7,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
-const rd = (f) => fs.readFileSync(path.join(here, f), "utf8");
+const rd = (f) => fs.readFileSync(path.join(here, f), "utf8").replace(/\r\n/g, "\n"); // tolerate CRLF checkouts
 const blocks = (s) => Object.fromEntries([...s.matchAll(/CREATE OR REPLACE FUNCTION public\.(\w+)\(.*?\$function\$;/gs)].map((m) => [m[1], m[0]]));
 const norm = (t) => t.replace(/\s+/g, " ").replace(/\s*\(\s*/g, "(").trim();
-const GUARD = /\n\s*-- 04: the caller may only ask about itself[^\n]*\n\s*IF current_setting\('role', true\) IN \('anon', 'authenticated'\) AND req_user_id IS DISTINCT FROM auth\.uid\(\) THEN\n\s*RETURN FALSE;\n\s*END IF;\n/;
+const GUARD = /\n\s*-- 04: the caller may only ask about itself[^\n]*\n\s*IF \(current_setting\('role', true\) IN \('anon', 'authenticated'\) OR auth\.uid\(\) IS NOT NULL\) AND req_user_id IS DISTINCT FROM auth\.uid\(\) THEN\n\s*RETURN FALSE;\n\s*END IF;\n/;
 const sources = { ...blocks(rd("sandbox/schema.sql")), ...blocks(rd("02_reader_objects.sql")), ...blocks(rd("01_access_predicates.sql")) };
 let bad = 0;
 const g = blocks(rd("04_helper_guard.sql")), r = blocks(rd("04_rollback.sql"));

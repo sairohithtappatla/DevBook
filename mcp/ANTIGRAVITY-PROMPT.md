@@ -31,7 +31,7 @@ B. MCP handler: authentication (every request, identical 401s, token never logge
 C. Website patches (read only): do they handle all five access_level values, preserve optimistic rollback in useUpdateBook, avoid silently overwriting SELECTED_USERS or any value the UI cannot edit, and match the actual reader_book_tree JSON (final/02_reader_objects.sql)? List behaviour changes (empty phases hidden, public counts published-only, progress reset limits).
 D. Test quality: do the tests really prove what the docs claim? Look for tests that could pass vacuously; propose 5 additional adversarial tests. Check the safety guards of scripts (PGHOST local-only, EXPECTED_TEST_APPKEY lock, production app key 6ktij8hk refusal).
 
-RUN LOCALLY (needs a local disposable PostgreSQL; if you cannot provide one, skip and say so):
+RUN LOCALLY (needs a local disposable PostgreSQL and Deno; if you cannot provide them, say so and rely on final/LOCAL-CHECKS-RESULT.txt, labelled as recorded evidence). On Windows apply patches with `git apply --ignore-whitespace` and normalise CRLF before running .sh files:
   bash mcp/proposals/rls-hardening/final/run-local-checks.sh   (see its header for the env variables)
   cd mcp/devbook-mcp && deno test --allow-net=127.0.0.1 --allow-env --allow-read=./handler.ts,./sql,../proposals/rls-hardening/final,../proposals/rls-hardening/sandbox tests/
 Report exact commands and results. Never claim real InsForge compatibility from these results.

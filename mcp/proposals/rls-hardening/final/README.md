@@ -8,9 +8,9 @@ Supersedes the first drafts in the parent folder (`../01_*.sql` … `../04_*.sql
 | `01_access_predicates.sql` | `can_read_book` (permission; unpublished books are members-only), new `can_discover_book`, `can_view_drafts`, `can_manage_members` -> SECURITY DEFINER (recursion fix), explicit EXECUTE for the new predicates | `01_rollback.sql` |
 | `02_reader_objects.sql` | additive: `reader_markdown`, `step_is_reader_visible`, `reader_step_json`, `reader_book_tree` (returns NULL for soft-deleted books), views `reader_steps` / `reader_book_step_counts` (skip soft-deleted books), grants | `02_rollback.sql` |
 | `03_policy_switch.sql` | the behaviour change: draft text only for OWNER/EDITOR/REVIEWER, discoverability for lists, F1, F2, F3 | `03_rollback.sql` |
-| `04_helper_guard.sql` | optional: permission helpers answer only about the caller | `04_rollback.sql` |
+| `04_helper_guard.sql` | permission helpers answer only about the caller. **Treat as part of the 03 rollout**: without it any caller can ask whether user X owns/edits book Y through the API, if the API exposes the helpers (already true today for `can_edit_book`/`can_delete_book` if exposed; 01 would add `can_manage_members`). Alternative to 04: move the helpers to a private schema | `04_rollback.sql` |
 | `05_optional_reset_my_book_progress.sql` | optional, independent: exact "reset my progress" | `05_rollback.sql` |
-Apply 01 -> 02 -> (deploy the website with the reader patch) -> 03 -> 04 [-> 05]. Roll back in reverse. Each file is one transaction. `check-04-drift.mjs` fails if 04 stops matching 01/02.
+Apply 01 -> 02 -> (deploy the website with the reader patch) -> 03 + 04 together [-> 05]. Never apply 03 before the website with the reader patch is live: the old reader selects `steps` directly and every non-editor would see empty books. Roll back in reverse. Each file is one transaction. `check-04-drift.mjs` fails if 04 stops matching 01/02.
 
 ## Decisions encoded (D-a..D-d from you, plus three new ones to confirm)
 | Rule | Where |

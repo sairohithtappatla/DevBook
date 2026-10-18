@@ -29,6 +29,7 @@ else skip "SQL parse check" "PARSER_DIR not set"; fi
 (cd "$HERE/sandbox" && true)
 run "04_helper_guard.sql is in sync with 01/02 (check-04-drift.mjs)" node "$HERE/check-04-drift.mjs"
 run "RLS matrix: baseline vs final 01-04, rollback restores everything (final/sandbox/run.mjs)" node "$HERE/sandbox/run.mjs"
+run "04 guard also fires without a role switch when a JWT subject exists (final/sandbox/guard-no-role.mjs)" node "$HERE/sandbox/guard-no-role.mjs"
 run "F3: a user cannot create a book owned by someone else (final/sandbox/insert-books.mjs)" node "$HERE/sandbox/insert-books.mjs"
 run "can_manage_members recursion reproduced and fixed (final/sandbox/recursion.mjs)" env SQL_DIR="$HERE" node "$HERE/sandbox/recursion.mjs"
 run "lifecycle + function privileges, default and restrictive grants (sandbox/lifecycle.mjs)" env SQL_DIR="$HERE" node "$RLS/sandbox/lifecycle.mjs"

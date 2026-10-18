@@ -94,7 +94,13 @@ const unb64url = (s: string) => Uint8Array.from(atob(s.replaceAll("-", "+").repl
 export class RateLimiter {
   private buckets = new Map<string, { tokens: number; at: number }>();
   constructor(private now: () => number, private capacity = { read: 60, write: 20 }) {}
-  // Best effort, per isolate only [A]: isolates do not share memory.
+  // Drops the bucket with the most tokens left (the least throttled caller loses least); throttled callers keep their state.
+  private evict() {
+    let key: string | undefined, most = -1;
+    for (const [k, b] of this.buckets) if (b.tokens > most) { most = b.tokens; key = k; }
+    if (key !== undefined) this.buckets.delete(key);
+  }
+  // Best effort, per isolate only [A]: isolates do not share memory. Buckets exist only for authenticated tokens.
   take(tokenId: string, kind: "read" | "write"): boolean {
     const cap = this.capacity[kind];
     const key = `${tokenId}:${kind}`;
@@ -102,7 +108,7 @@ export class RateLimiter {
     const b = this.buckets.get(key) ?? { tokens: cap, at: t };
     b.tokens = Math.min(cap, b.tokens + (Math.max(0, t - b.at) / 60000) * cap); // clamp: a clock that steps back must not drain the bucket
     b.at = Math.max(b.at, t);
-    if (this.buckets.size > 5000) this.buckets.clear(); // bound memory
+    if (this.buckets.size > 5000) this.evict(); // bound memory without ever clearing everybody's state
     if (b.tokens < 1) { this.buckets.set(key, b); return false; }
     b.tokens -= 1;
     this.buckets.set(key, b);
@@ -612,7 +618,10 @@ export function createInsforgeStore(db: DbLike): Store {
   };
   const insert = async (table: "phases" | "steps", row: Record<string, unknown>, cols: string) => {
     const r = await db.from(table).insert([row]).select(cols).single();
-    if (r.error) throw new StoreError(r.error.code === "23505" ? "CONFLICT" : "BACKEND"); // unique (parent, position) race
+    // unique (parent, position) race. The code is the Postgres SQLSTATE when the API passes it through; accept the wording too in case
+    // a proxy rewrites the error (the message is only inspected here, never forwarded).
+    const dup = r.error && (r.error.code === "23505" || /duplicate key|unique constraint/i.test(String(r.error.message ?? "")) || /already exists/i.test(String(r.error.details ?? "")));
+    if (r.error) throw new StoreError(dup ? "CONFLICT" : "BACKEND");
     return r.data;
   };
   return {

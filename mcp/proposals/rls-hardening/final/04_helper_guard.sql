@@ -4,8 +4,10 @@
 -- book Y" for arbitrary ids. EXECUTE must stay granted to anon/authenticated (policies run as the caller and call these),
 -- so the fix is inside the function: for the roles anon/authenticated, a req_user_id different from auth.uid() returns
 -- FALSE. Trusted roles (service/admin, migrations) are unaffected. PROPOSAL. NOT APPLIED to any real backend.
--- ASSUMPTION [A]: the API sets the Postgres role GUC ('role') to anon/authenticated (PostgREST does with SET LOCAL ROLE).
--- If InsForge does not, the guard never fires: behaviour equals today's, nothing breaks. Test project must confirm it fires.
+-- ASSUMPTION [A]: the API sets the Postgres role GUC ('role') to anon/authenticated (PostgREST does with SET LOCAL ROLE). The guard
+-- ALSO fires whenever auth.uid() is set (a JWT user context), so signed-in callers are covered even if the role is not set; only an
+-- anonymous caller on a connection whose role is not anon would escape it. Trusted contexts (admin key: auth.uid() NULL, role not
+-- anon/authenticated) are unaffected. Test project must confirm which case applies.
 BEGIN;
 
 CREATE OR REPLACE FUNCTION public.can_read_book(target_book_id uuid, req_user_id uuid)
@@ -19,7 +21,7 @@ DECLARE
     owner_id UUID;
 BEGIN
     -- 04: the caller may only ask about itself. Policies always pass auth.uid(), so they are unaffected.
-    IF current_setting('role', true) IN ('anon', 'authenticated') AND req_user_id IS DISTINCT FROM auth.uid() THEN
+    IF (current_setting('role', true) IN ('anon', 'authenticated') OR auth.uid() IS NOT NULL) AND req_user_id IS DISTINCT FROM auth.uid() THEN
         RETURN FALSE;
     END IF;
     SELECT access_level, publication_status, deleted_at INTO b FROM books WHERE id = target_book_id;
@@ -74,7 +76,7 @@ DECLARE
     b RECORD;
 BEGIN
     -- 04: the caller may only ask about itself. Policies always pass auth.uid(), so they are unaffected.
-    IF current_setting('role', true) IN ('anon', 'authenticated') AND req_user_id IS DISTINCT FROM auth.uid() THEN
+    IF (current_setting('role', true) IN ('anon', 'authenticated') OR auth.uid() IS NOT NULL) AND req_user_id IS DISTINCT FROM auth.uid() THEN
         RETURN FALSE;
     END IF;
     IF NOT public.can_read_book(target_book_id, req_user_id) THEN
@@ -99,7 +101,7 @@ CREATE OR REPLACE FUNCTION public.can_view_drafts(target_book_id uuid, req_user_
 AS $function$
 BEGIN
     -- 04: the caller may only ask about itself. Policies always pass auth.uid(), so they are unaffected.
-    IF current_setting('role', true) IN ('anon', 'authenticated') AND req_user_id IS DISTINCT FROM auth.uid() THEN
+    IF (current_setting('role', true) IN ('anon', 'authenticated') OR auth.uid() IS NOT NULL) AND req_user_id IS DISTINCT FROM auth.uid() THEN
         RETURN FALSE;
     END IF;
     RETURN EXISTS (
@@ -122,7 +124,7 @@ CREATE OR REPLACE FUNCTION public.can_manage_members(target_book_id uuid, req_us
 AS $function$
 BEGIN
     -- 04: the caller may only ask about itself. Policies always pass auth.uid(), so they are unaffected.
-    IF current_setting('role', true) IN ('anon', 'authenticated') AND req_user_id IS DISTINCT FROM auth.uid() THEN
+    IF (current_setting('role', true) IN ('anon', 'authenticated') OR auth.uid() IS NOT NULL) AND req_user_id IS DISTINCT FROM auth.uid() THEN
         RETURN FALSE;
     END IF;
     RETURN EXISTS (
@@ -140,7 +142,7 @@ CREATE OR REPLACE FUNCTION public.step_is_reader_visible(target_step_id uuid, re
 AS $function$
 BEGIN
     -- 04: the caller may only ask about itself. Policies always pass auth.uid(), so they are unaffected.
-    IF current_setting('role', true) IN ('anon', 'authenticated') AND req_user_id IS DISTINCT FROM auth.uid() THEN
+    IF (current_setting('role', true) IN ('anon', 'authenticated') OR auth.uid() IS NOT NULL) AND req_user_id IS DISTINCT FROM auth.uid() THEN
         RETURN FALSE;
     END IF;
     RETURN EXISTS (
@@ -163,7 +165,7 @@ CREATE OR REPLACE FUNCTION public.can_edit_book(target_book_id uuid, req_user_id
 AS $function$
 BEGIN
     -- 04: the caller may only ask about itself. Policies always pass auth.uid(), so they are unaffected.
-    IF current_setting('role', true) IN ('anon', 'authenticated') AND req_user_id IS DISTINCT FROM auth.uid() THEN
+    IF (current_setting('role', true) IN ('anon', 'authenticated') OR auth.uid() IS NOT NULL) AND req_user_id IS DISTINCT FROM auth.uid() THEN
         RETURN FALSE;
     END IF;
     RETURN EXISTS (
@@ -181,7 +183,7 @@ CREATE OR REPLACE FUNCTION public.can_delete_book(target_book_id uuid, req_user_
 AS $function$
 BEGIN
     -- 04: the caller may only ask about itself. Policies always pass auth.uid(), so they are unaffected.
-    IF current_setting('role', true) IN ('anon', 'authenticated') AND req_user_id IS DISTINCT FROM auth.uid() THEN
+    IF (current_setting('role', true) IN ('anon', 'authenticated') OR auth.uid() IS NOT NULL) AND req_user_id IS DISTINCT FROM auth.uid() THEN
         RETURN FALSE;
     END IF;
     RETURN EXISTS (
