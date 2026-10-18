@@ -1,0 +1,33 @@
+Local checks, 2026-10-18T11:32Z. Disposable native PostgreSQL 18.4 on 127.0.0.1; Deno 2.9.6; website checks on a throwaway copy of v2's src/ with both reader patches applied. No InsForge project, no remote database, no network service other than package downloads.
+Command: PG_MODULE=... PGPORT=54329 DENO=... DENO_DIR=... FE_NODE_MODULES=... PARSER_DIR=... bash mcp/proposals/rls-hardening/final/run-local-checks.sh
+
+================ RESULT ================
+PASS  local PostgreSQL reachable on 127.0.0.1:54329
+PASS  SQL parses (final set, rollbacks, mcp_tokens)
+PASS  04_helper_guard.sql is in sync with 01/02 (check-04-drift.mjs)
+PASS  RLS matrix: baseline vs final 01-04, rollback restores everything (final/sandbox/run.mjs)
+PASS  F3: a user cannot create a book owned by someone else (final/sandbox/insert-books.mjs)
+PASS  can_manage_members recursion reproduced and fixed (final/sandbox/recursion.mjs)
+PASS  lifecycle + function privileges, default and restrictive grants (sandbox/lifecycle.mjs)
+PASS  soft-deleted books hidden from the reader function (sandbox/softdelete.mjs)
+PASS  progress reset: which rows survive (sandbox/progress-reset.mjs)
+PASS  grants report + rollback leaves no function behind (sandbox/grants-report.mjs)
+PASS  grants report, restrictive default privileges
+PASS  MCP: deno check handler.ts
+PASS  MCP: deno lint handler.ts (no-import-prefix/no-explicit-any excluded: single-file deploy)
+PASS  MCP: unit tests with in-memory store + store-on-PostgreSQL integration tests
+PASS  MCP: token tool tests (mcp/tools/mcp-token.test.mjs)
+PASS  RPC contract expectations vs recorded SQL output (rpc-expectations.test.mjs)
+PASS  patch application order matrix (verify-patch-order.sh)
+PASS  website: base src type-checks
+PASS  website: apply access-level patch, then stacked reader patch (git apply)
+PASS  website (combined patches): tsc -b
+PASS  website (combined patches): vite build
+PASS  website (combined patches): oxlint warnings not above base (36 -> 36)
+PASS  website (combined patches): reader-integration.test.ts
+PASS  website (combined patches): reader-page.test.tsx
+PASS  website (combined patches): softdelete.test.ts
+PASS  website (combined patches): access-level + optimistic rollback (real useUpdateBook)
+PASS  sandbox scripts refuse a non-local PGHOST
+PASS  API scripts refuse production / unnamed project (exposure-check, rpc-contract-check, guard)
+failures: 0

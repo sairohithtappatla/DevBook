@@ -1,0 +1,15 @@
+--- a/02_reader_objects.sql	2026-10-18 10:51:41.593944149 +0000
++++ b/02_reader_objects.sql	2026-10-18 10:51:41.609381850 +0000
+@@ -112,6 +112,12 @@
+ 
+     SELECT * INTO bk FROM books WHERE id = target_book_id;
+ 
++    -- A soft-deleted book is hidden here for EVERYONE, owner included, exactly like DBService.getBook (deleted_at IS NULL).
++    -- can_read_book still lets the owner read a soft-deleted book (restore / trash screens); the reader must not.
++    IF bk.deleted_at IS NOT NULL THEN
++        RETURN NULL;
++    END IF;
++
+     RETURN jsonb_build_object(
+         'book', jsonb_build_object(
+             'id', bk.id, 'title', bk.title, 'slug', bk.slug, 'description', bk.description,

@@ -1,0 +1,60 @@
+{
+ "book": "b0000000-0000-0000-0000-0000000000d1",
+ "before": {
+  "anon": null,
+  "stranger": null,
+  "editor": null,
+  "owner": {
+   "book": {
+    "id": "b0000000-0000-0000-0000-0000000000d1",
+    "slug": "deleted-book",
+    "tags": [],
+    "title": "Deleted Book",
+    "creator": {
+     "id": "c0000000-0000-0000-0000-000000000001",
+     "bio": null,
+     "name": "Author 1",
+     "avatar_url": null
+    },
+    "cover_url": null,
+    "created_at": "2026-10-18T11:22:00.608777+00:00",
+    "created_by": "c0000000-0000-0000-0000-000000000001",
+    "difficulty": "BEGINNER",
+    "updated_at": "2026-10-18T11:22:00.608777+00:00",
+    "description": null,
+    "access_level": "PUBLIC",
+    "publication_status": "PUBLISHED",
+    "estimated_read_time": 0
+   },
+   "phases": [
+    {
+     "id": "f0000000-0000-0000-0000-0000000000d1",
+     "steps": [
+      {
+       "id": "f4e3311b-ef7b-4a35-877b-f8c644ffca9f",
+       "slug": null,
+       "title": "Deleted step",
+       "status": "Published",
+       "markdown": "M",
+       "position": 1,
+       "difficulty": null,
+       "visibility": null,
+       "attachments": [],
+       "description": null,
+       "estimatedTime": null,
+       "publishedMarkdown": "M"
+      }
+     ],
+     "title": "P",
+     "position": 1
+    }
+   ]
+  }
+ },
+ "after": {
+  "anon": null,
+  "stranger": null,
+  "editor": null,
+  "owner": null
+ }
+}

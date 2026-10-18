@@ -1,0 +1,2493 @@
+{
+ "generatedFrom": "native PostgreSQL 18.4",
+ "ids": {
+  "books": {
+   "PUB": "b0000000-0000-0000-0000-000000000001",
+   "EMPTY": "b0000000-0000-0000-0000-000000000002",
+   "UNL": "b0000000-0000-0000-0000-000000000003",
+   "DRAFTBOOK": "b0000000-0000-0000-0000-000000000004"
+  },
+  "phases": {
+   "A": "f0000000-0000-0000-0000-00000000000a",
+   "B": "f0000000-0000-0000-0000-00000000000b",
+   "C": "f0000000-0000-0000-0000-00000000000c",
+   "D": "f0000000-0000-0000-0000-00000000000d",
+   "E": "f0000000-0000-0000-0000-00000000000e",
+   "U": "f0000000-0000-0000-0000-00000000000f",
+   "X": "f0000000-0000-0000-0000-000000000010"
+  },
+  "steps": {
+   "1": "50000000-0000-0000-0000-000000000001",
+   "2": "50000000-0000-0000-0000-000000000002",
+   "3": "50000000-0000-0000-0000-000000000003",
+   "4": "50000000-0000-0000-0000-000000000004",
+   "5": "50000000-0000-0000-0000-000000000005",
+   "6": "50000000-0000-0000-0000-000000000006"
+  },
+  "users": {
+   "owner": "c0000000-0000-0000-0000-000000000001",
+   "editor": "c0000000-0000-0000-0000-000000000002",
+   "reviewer": "c0000000-0000-0000-0000-000000000003",
+   "viewer": "c0000000-0000-0000-0000-000000000004",
+   "stranger": "c0000000-0000-0000-0000-000000000005"
+  }
+ },
+ "trees": {
+  "anon": {
+   "PUB:false": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000001",
+     "slug": "public-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Public Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.262121+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.262121+00:00",
+     "description": "Public Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-00000000000a",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000001",
+        "slug": "published-step",
+        "title": "Published step",
+        "status": "Published",
+        "markdown": "PUB-1 published text",
+        "position": 1,
+        "difficulty": "Intermediate",
+        "visibility": "Public",
+        "attachments": [
+         {
+          "id": "a0000000-0000-0000-0000-000000000001",
+          "file_name": "pub.pdf",
+          "file_size": 10,
+          "file_type": "application/pdf",
+          "storage_path": "k/pub.pdf"
+         }
+        ],
+        "description": "d1",
+        "estimatedTime": 7,
+        "publishedMarkdown": "PUB-1 published text"
+       }
+      ],
+      "title": "Phase A",
+      "position": 1
+     },
+     {
+      "id": "f0000000-0000-0000-0000-00000000000b",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000003",
+        "slug": null,
+        "title": "Legacy step",
+        "status": "Published",
+        "markdown": "LEGACY text of a step without status",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": "LEGACY text of a step without status"
+       }
+      ],
+      "title": "Phase B",
+      "position": 2
+     }
+    ]
+   },
+   "PUB:true": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000001",
+     "slug": "public-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Public Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.262121+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.262121+00:00",
+     "description": "Public Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-00000000000a",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000001",
+        "slug": "published-step",
+        "title": "Published step",
+        "status": "Published",
+        "markdown": "PUB-1 published text",
+        "position": 1,
+        "difficulty": "Intermediate",
+        "visibility": "Public",
+        "attachments": [
+         {
+          "id": "a0000000-0000-0000-0000-000000000001",
+          "file_name": "pub.pdf",
+          "file_size": 10,
+          "file_type": "application/pdf",
+          "storage_path": "k/pub.pdf"
+         }
+        ],
+        "description": "d1",
+        "estimatedTime": 7,
+        "publishedMarkdown": "PUB-1 published text"
+       }
+      ],
+      "title": "Phase A",
+      "position": 1
+     },
+     {
+      "id": "f0000000-0000-0000-0000-00000000000b",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000003",
+        "slug": null,
+        "title": "Legacy step",
+        "status": "Published",
+        "markdown": "LEGACY text of a step without status",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": "LEGACY text of a step without status"
+       }
+      ],
+      "title": "Phase B",
+      "position": 2
+     }
+    ]
+   },
+   "EMPTY:false": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000002",
+     "slug": "empty-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Empty Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.266021+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.266021+00:00",
+     "description": "Empty Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": []
+   },
+   "EMPTY:true": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000002",
+     "slug": "empty-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Empty Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.266021+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.266021+00:00",
+     "description": "Empty Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": []
+   },
+   "UNL:false": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000003",
+     "slug": "unlisted-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Unlisted Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.267439+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.267439+00:00",
+     "description": "Unlisted Book description",
+     "access_level": "UNLISTED",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-00000000000f",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000005",
+        "slug": "unl",
+        "title": "Unlisted step",
+        "status": "Published",
+        "markdown": "UNL text",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": "UNL text"
+       }
+      ],
+      "title": "Unlisted phase",
+      "position": 1
+     }
+    ]
+   },
+   "UNL:true": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000003",
+     "slug": "unlisted-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Unlisted Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.267439+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.267439+00:00",
+     "description": "Unlisted Book description",
+     "access_level": "UNLISTED",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-00000000000f",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000005",
+        "slug": "unl",
+        "title": "Unlisted step",
+        "status": "Published",
+        "markdown": "UNL text",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": "UNL text"
+       }
+      ],
+      "title": "Unlisted phase",
+      "position": 1
+     }
+    ]
+   },
+   "DRAFTBOOK:false": null,
+   "DRAFTBOOK:true": null
+  },
+  "stranger": {
+   "PUB:false": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000001",
+     "slug": "public-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Public Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.262121+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.262121+00:00",
+     "description": "Public Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-00000000000a",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000001",
+        "slug": "published-step",
+        "title": "Published step",
+        "status": "Published",
+        "markdown": "PUB-1 published text",
+        "position": 1,
+        "difficulty": "Intermediate",
+        "visibility": "Public",
+        "attachments": [
+         {
+          "id": "a0000000-0000-0000-0000-000000000001",
+          "file_name": "pub.pdf",
+          "file_size": 10,
+          "file_type": "application/pdf",
+          "storage_path": "k/pub.pdf"
+         }
+        ],
+        "description": "d1",
+        "estimatedTime": 7,
+        "publishedMarkdown": "PUB-1 published text"
+       }
+      ],
+      "title": "Phase A",
+      "position": 1
+     },
+     {
+      "id": "f0000000-0000-0000-0000-00000000000b",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000003",
+        "slug": null,
+        "title": "Legacy step",
+        "status": "Published",
+        "markdown": "LEGACY text of a step without status",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": "LEGACY text of a step without status"
+       }
+      ],
+      "title": "Phase B",
+      "position": 2
+     }
+    ]
+   },
+   "PUB:true": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000001",
+     "slug": "public-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Public Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.262121+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.262121+00:00",
+     "description": "Public Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-00000000000a",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000001",
+        "slug": "published-step",
+        "title": "Published step",
+        "status": "Published",
+        "markdown": "PUB-1 published text",
+        "position": 1,
+        "difficulty": "Intermediate",
+        "visibility": "Public",
+        "attachments": [
+         {
+          "id": "a0000000-0000-0000-0000-000000000001",
+          "file_name": "pub.pdf",
+          "file_size": 10,
+          "file_type": "application/pdf",
+          "storage_path": "k/pub.pdf"
+         }
+        ],
+        "description": "d1",
+        "estimatedTime": 7,
+        "publishedMarkdown": "PUB-1 published text"
+       }
+      ],
+      "title": "Phase A",
+      "position": 1
+     },
+     {
+      "id": "f0000000-0000-0000-0000-00000000000b",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000003",
+        "slug": null,
+        "title": "Legacy step",
+        "status": "Published",
+        "markdown": "LEGACY text of a step without status",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": "LEGACY text of a step without status"
+       }
+      ],
+      "title": "Phase B",
+      "position": 2
+     }
+    ]
+   },
+   "EMPTY:false": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000002",
+     "slug": "empty-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Empty Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.266021+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.266021+00:00",
+     "description": "Empty Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": []
+   },
+   "EMPTY:true": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000002",
+     "slug": "empty-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Empty Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.266021+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.266021+00:00",
+     "description": "Empty Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": []
+   },
+   "UNL:false": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000003",
+     "slug": "unlisted-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Unlisted Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.267439+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.267439+00:00",
+     "description": "Unlisted Book description",
+     "access_level": "UNLISTED",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-00000000000f",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000005",
+        "slug": "unl",
+        "title": "Unlisted step",
+        "status": "Published",
+        "markdown": "UNL text",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": "UNL text"
+       }
+      ],
+      "title": "Unlisted phase",
+      "position": 1
+     }
+    ]
+   },
+   "UNL:true": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000003",
+     "slug": "unlisted-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Unlisted Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.267439+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.267439+00:00",
+     "description": "Unlisted Book description",
+     "access_level": "UNLISTED",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-00000000000f",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000005",
+        "slug": "unl",
+        "title": "Unlisted step",
+        "status": "Published",
+        "markdown": "UNL text",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": "UNL text"
+       }
+      ],
+      "title": "Unlisted phase",
+      "position": 1
+     }
+    ]
+   },
+   "DRAFTBOOK:false": null,
+   "DRAFTBOOK:true": null
+  },
+  "viewer": {
+   "PUB:false": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000001",
+     "slug": "public-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Public Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.262121+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.262121+00:00",
+     "description": "Public Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-00000000000a",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000001",
+        "slug": "published-step",
+        "title": "Published step",
+        "status": "Published",
+        "markdown": "PUB-1 published text",
+        "position": 1,
+        "difficulty": "Intermediate",
+        "visibility": "Public",
+        "attachments": [
+         {
+          "id": "a0000000-0000-0000-0000-000000000001",
+          "file_name": "pub.pdf",
+          "file_size": 10,
+          "file_type": "application/pdf",
+          "storage_path": "k/pub.pdf"
+         }
+        ],
+        "description": "d1",
+        "estimatedTime": 7,
+        "publishedMarkdown": "PUB-1 published text"
+       }
+      ],
+      "title": "Phase A",
+      "position": 1
+     },
+     {
+      "id": "f0000000-0000-0000-0000-00000000000b",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000003",
+        "slug": null,
+        "title": "Legacy step",
+        "status": "Published",
+        "markdown": "LEGACY text of a step without status",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": "LEGACY text of a step without status"
+       }
+      ],
+      "title": "Phase B",
+      "position": 2
+     }
+    ]
+   },
+   "PUB:true": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000001",
+     "slug": "public-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Public Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.262121+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.262121+00:00",
+     "description": "Public Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-00000000000a",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000001",
+        "slug": "published-step",
+        "title": "Published step",
+        "status": "Published",
+        "markdown": "PUB-1 published text",
+        "position": 1,
+        "difficulty": "Intermediate",
+        "visibility": "Public",
+        "attachments": [
+         {
+          "id": "a0000000-0000-0000-0000-000000000001",
+          "file_name": "pub.pdf",
+          "file_size": 10,
+          "file_type": "application/pdf",
+          "storage_path": "k/pub.pdf"
+         }
+        ],
+        "description": "d1",
+        "estimatedTime": 7,
+        "publishedMarkdown": "PUB-1 published text"
+       }
+      ],
+      "title": "Phase A",
+      "position": 1
+     },
+     {
+      "id": "f0000000-0000-0000-0000-00000000000b",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000003",
+        "slug": null,
+        "title": "Legacy step",
+        "status": "Published",
+        "markdown": "LEGACY text of a step without status",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": "LEGACY text of a step without status"
+       }
+      ],
+      "title": "Phase B",
+      "position": 2
+     }
+    ]
+   },
+   "EMPTY:false": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000002",
+     "slug": "empty-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Empty Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.266021+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.266021+00:00",
+     "description": "Empty Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": []
+   },
+   "EMPTY:true": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000002",
+     "slug": "empty-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Empty Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.266021+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.266021+00:00",
+     "description": "Empty Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": []
+   },
+   "UNL:false": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000003",
+     "slug": "unlisted-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Unlisted Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.267439+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.267439+00:00",
+     "description": "Unlisted Book description",
+     "access_level": "UNLISTED",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-00000000000f",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000005",
+        "slug": "unl",
+        "title": "Unlisted step",
+        "status": "Published",
+        "markdown": "UNL text",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": "UNL text"
+       }
+      ],
+      "title": "Unlisted phase",
+      "position": 1
+     }
+    ]
+   },
+   "UNL:true": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000003",
+     "slug": "unlisted-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Unlisted Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.267439+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.267439+00:00",
+     "description": "Unlisted Book description",
+     "access_level": "UNLISTED",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-00000000000f",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000005",
+        "slug": "unl",
+        "title": "Unlisted step",
+        "status": "Published",
+        "markdown": "UNL text",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": "UNL text"
+       }
+      ],
+      "title": "Unlisted phase",
+      "position": 1
+     }
+    ]
+   },
+   "DRAFTBOOK:false": null,
+   "DRAFTBOOK:true": null
+  },
+  "reviewer": {
+   "PUB:false": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000001",
+     "slug": "public-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Public Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.262121+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.262121+00:00",
+     "description": "Public Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-00000000000a",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000001",
+        "slug": "published-step",
+        "title": "Published step",
+        "status": "Published",
+        "markdown": "PUB-1 published text",
+        "position": 1,
+        "difficulty": "Intermediate",
+        "visibility": "Public",
+        "attachments": [
+         {
+          "id": "a0000000-0000-0000-0000-000000000001",
+          "file_name": "pub.pdf",
+          "file_size": 10,
+          "file_type": "application/pdf",
+          "storage_path": "k/pub.pdf"
+         }
+        ],
+        "description": "d1",
+        "estimatedTime": 7,
+        "publishedMarkdown": "PUB-1 published text"
+       }
+      ],
+      "title": "Phase A",
+      "position": 1
+     },
+     {
+      "id": "f0000000-0000-0000-0000-00000000000b",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000003",
+        "slug": null,
+        "title": "Legacy step",
+        "status": "Published",
+        "markdown": "LEGACY text of a step without status",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": "LEGACY text of a step without status"
+       }
+      ],
+      "title": "Phase B",
+      "position": 2
+     }
+    ]
+   },
+   "PUB:true": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000001",
+     "slug": "public-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Public Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.262121+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.262121+00:00",
+     "description": "Public Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-00000000000a",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000001",
+        "slug": "published-step",
+        "title": "Published step",
+        "status": "Published",
+        "markdown": "DRAFT-EDIT-1 newer unpublished text",
+        "position": 1,
+        "difficulty": "Intermediate",
+        "visibility": "Public",
+        "attachments": [
+         {
+          "id": "a0000000-0000-0000-0000-000000000001",
+          "file_name": "pub.pdf",
+          "file_size": 10,
+          "file_type": "application/pdf",
+          "storage_path": "k/pub.pdf"
+         }
+        ],
+        "description": "d1",
+        "estimatedTime": 7,
+        "publishedMarkdown": "PUB-1 published text"
+       },
+       {
+        "id": "50000000-0000-0000-0000-000000000002",
+        "slug": "draft-only",
+        "title": "Draft-only step",
+        "status": "Draft",
+        "markdown": "DRAFT_SECRET only an editor may read",
+        "position": 2,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [
+         {
+          "id": "a0000000-0000-0000-0000-000000000002",
+          "file_name": "draft.pdf",
+          "file_size": 20,
+          "file_type": "application/pdf",
+          "storage_path": "k/draft.pdf"
+         }
+        ],
+        "description": "d2",
+        "estimatedTime": null,
+        "publishedMarkdown": null
+       }
+      ],
+      "title": "Phase A",
+      "position": 1
+     },
+     {
+      "id": "f0000000-0000-0000-0000-00000000000b",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000003",
+        "slug": null,
+        "title": "Legacy step",
+        "status": "Draft",
+        "markdown": "LEGACY text of a step without status",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": null
+       }
+      ],
+      "title": "Phase B",
+      "position": 2
+     },
+     {
+      "id": "f0000000-0000-0000-0000-00000000000d",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000004",
+        "slug": null,
+        "title": "Draft in phase D",
+        "status": "Draft",
+        "markdown": "DRAFT_SECRET phase D",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": null
+       }
+      ],
+      "title": "Phase D (draft only)",
+      "position": 4
+     }
+    ]
+   },
+   "EMPTY:false": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000002",
+     "slug": "empty-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Empty Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.266021+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.266021+00:00",
+     "description": "Empty Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": []
+   },
+   "EMPTY:true": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000002",
+     "slug": "empty-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Empty Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.266021+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.266021+00:00",
+     "description": "Empty Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": []
+   },
+   "UNL:false": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000003",
+     "slug": "unlisted-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Unlisted Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.267439+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.267439+00:00",
+     "description": "Unlisted Book description",
+     "access_level": "UNLISTED",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-00000000000f",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000005",
+        "slug": "unl",
+        "title": "Unlisted step",
+        "status": "Published",
+        "markdown": "UNL text",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": "UNL text"
+       }
+      ],
+      "title": "Unlisted phase",
+      "position": 1
+     }
+    ]
+   },
+   "UNL:true": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000003",
+     "slug": "unlisted-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Unlisted Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.267439+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.267439+00:00",
+     "description": "Unlisted Book description",
+     "access_level": "UNLISTED",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-00000000000f",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000005",
+        "slug": "unl",
+        "title": "Unlisted step",
+        "status": "Published",
+        "markdown": "UNL text",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": "UNL text"
+       }
+      ],
+      "title": "Unlisted phase",
+      "position": 1
+     }
+    ]
+   },
+   "DRAFTBOOK:false": null,
+   "DRAFTBOOK:true": null
+  },
+  "editor": {
+   "PUB:false": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000001",
+     "slug": "public-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Public Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.262121+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.262121+00:00",
+     "description": "Public Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-00000000000a",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000001",
+        "slug": "published-step",
+        "title": "Published step",
+        "status": "Published",
+        "markdown": "PUB-1 published text",
+        "position": 1,
+        "difficulty": "Intermediate",
+        "visibility": "Public",
+        "attachments": [
+         {
+          "id": "a0000000-0000-0000-0000-000000000001",
+          "file_name": "pub.pdf",
+          "file_size": 10,
+          "file_type": "application/pdf",
+          "storage_path": "k/pub.pdf"
+         }
+        ],
+        "description": "d1",
+        "estimatedTime": 7,
+        "publishedMarkdown": "PUB-1 published text"
+       }
+      ],
+      "title": "Phase A",
+      "position": 1
+     },
+     {
+      "id": "f0000000-0000-0000-0000-00000000000b",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000003",
+        "slug": null,
+        "title": "Legacy step",
+        "status": "Published",
+        "markdown": "LEGACY text of a step without status",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": "LEGACY text of a step without status"
+       }
+      ],
+      "title": "Phase B",
+      "position": 2
+     }
+    ]
+   },
+   "PUB:true": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000001",
+     "slug": "public-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Public Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.262121+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.262121+00:00",
+     "description": "Public Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-00000000000a",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000001",
+        "slug": "published-step",
+        "title": "Published step",
+        "status": "Published",
+        "markdown": "DRAFT-EDIT-1 newer unpublished text",
+        "position": 1,
+        "difficulty": "Intermediate",
+        "visibility": "Public",
+        "attachments": [
+         {
+          "id": "a0000000-0000-0000-0000-000000000001",
+          "file_name": "pub.pdf",
+          "file_size": 10,
+          "file_type": "application/pdf",
+          "storage_path": "k/pub.pdf"
+         }
+        ],
+        "description": "d1",
+        "estimatedTime": 7,
+        "publishedMarkdown": "PUB-1 published text"
+       },
+       {
+        "id": "50000000-0000-0000-0000-000000000002",
+        "slug": "draft-only",
+        "title": "Draft-only step",
+        "status": "Draft",
+        "markdown": "DRAFT_SECRET only an editor may read",
+        "position": 2,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [
+         {
+          "id": "a0000000-0000-0000-0000-000000000002",
+          "file_name": "draft.pdf",
+          "file_size": 20,
+          "file_type": "application/pdf",
+          "storage_path": "k/draft.pdf"
+         }
+        ],
+        "description": "d2",
+        "estimatedTime": null,
+        "publishedMarkdown": null
+       }
+      ],
+      "title": "Phase A",
+      "position": 1
+     },
+     {
+      "id": "f0000000-0000-0000-0000-00000000000b",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000003",
+        "slug": null,
+        "title": "Legacy step",
+        "status": "Draft",
+        "markdown": "LEGACY text of a step without status",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": null
+       }
+      ],
+      "title": "Phase B",
+      "position": 2
+     },
+     {
+      "id": "f0000000-0000-0000-0000-00000000000d",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000004",
+        "slug": null,
+        "title": "Draft in phase D",
+        "status": "Draft",
+        "markdown": "DRAFT_SECRET phase D",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": null
+       }
+      ],
+      "title": "Phase D (draft only)",
+      "position": 4
+     }
+    ]
+   },
+   "EMPTY:false": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000002",
+     "slug": "empty-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Empty Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.266021+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.266021+00:00",
+     "description": "Empty Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": []
+   },
+   "EMPTY:true": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000002",
+     "slug": "empty-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Empty Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.266021+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.266021+00:00",
+     "description": "Empty Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": []
+   },
+   "UNL:false": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000003",
+     "slug": "unlisted-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Unlisted Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.267439+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.267439+00:00",
+     "description": "Unlisted Book description",
+     "access_level": "UNLISTED",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-00000000000f",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000005",
+        "slug": "unl",
+        "title": "Unlisted step",
+        "status": "Published",
+        "markdown": "UNL text",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": "UNL text"
+       }
+      ],
+      "title": "Unlisted phase",
+      "position": 1
+     }
+    ]
+   },
+   "UNL:true": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000003",
+     "slug": "unlisted-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Unlisted Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.267439+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.267439+00:00",
+     "description": "Unlisted Book description",
+     "access_level": "UNLISTED",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-00000000000f",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000005",
+        "slug": "unl",
+        "title": "Unlisted step",
+        "status": "Published",
+        "markdown": "UNL text",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": "UNL text"
+       }
+      ],
+      "title": "Unlisted phase",
+      "position": 1
+     }
+    ]
+   },
+   "DRAFTBOOK:false": null,
+   "DRAFTBOOK:true": null
+  },
+  "owner": {
+   "PUB:false": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000001",
+     "slug": "public-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Public Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.262121+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.262121+00:00",
+     "description": "Public Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-00000000000a",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000001",
+        "slug": "published-step",
+        "title": "Published step",
+        "status": "Published",
+        "markdown": "PUB-1 published text",
+        "position": 1,
+        "difficulty": "Intermediate",
+        "visibility": "Public",
+        "attachments": [
+         {
+          "id": "a0000000-0000-0000-0000-000000000001",
+          "file_name": "pub.pdf",
+          "file_size": 10,
+          "file_type": "application/pdf",
+          "storage_path": "k/pub.pdf"
+         }
+        ],
+        "description": "d1",
+        "estimatedTime": 7,
+        "publishedMarkdown": "PUB-1 published text"
+       }
+      ],
+      "title": "Phase A",
+      "position": 1
+     },
+     {
+      "id": "f0000000-0000-0000-0000-00000000000b",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000003",
+        "slug": null,
+        "title": "Legacy step",
+        "status": "Published",
+        "markdown": "LEGACY text of a step without status",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": "LEGACY text of a step without status"
+       }
+      ],
+      "title": "Phase B",
+      "position": 2
+     }
+    ]
+   },
+   "PUB:true": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000001",
+     "slug": "public-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Public Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.262121+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.262121+00:00",
+     "description": "Public Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-00000000000a",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000001",
+        "slug": "published-step",
+        "title": "Published step",
+        "status": "Published",
+        "markdown": "DRAFT-EDIT-1 newer unpublished text",
+        "position": 1,
+        "difficulty": "Intermediate",
+        "visibility": "Public",
+        "attachments": [
+         {
+          "id": "a0000000-0000-0000-0000-000000000001",
+          "file_name": "pub.pdf",
+          "file_size": 10,
+          "file_type": "application/pdf",
+          "storage_path": "k/pub.pdf"
+         }
+        ],
+        "description": "d1",
+        "estimatedTime": 7,
+        "publishedMarkdown": "PUB-1 published text"
+       },
+       {
+        "id": "50000000-0000-0000-0000-000000000002",
+        "slug": "draft-only",
+        "title": "Draft-only step",
+        "status": "Draft",
+        "markdown": "DRAFT_SECRET only an editor may read",
+        "position": 2,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [
+         {
+          "id": "a0000000-0000-0000-0000-000000000002",
+          "file_name": "draft.pdf",
+          "file_size": 20,
+          "file_type": "application/pdf",
+          "storage_path": "k/draft.pdf"
+         }
+        ],
+        "description": "d2",
+        "estimatedTime": null,
+        "publishedMarkdown": null
+       }
+      ],
+      "title": "Phase A",
+      "position": 1
+     },
+     {
+      "id": "f0000000-0000-0000-0000-00000000000b",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000003",
+        "slug": null,
+        "title": "Legacy step",
+        "status": "Draft",
+        "markdown": "LEGACY text of a step without status",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": null
+       }
+      ],
+      "title": "Phase B",
+      "position": 2
+     },
+     {
+      "id": "f0000000-0000-0000-0000-00000000000d",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000004",
+        "slug": null,
+        "title": "Draft in phase D",
+        "status": "Draft",
+        "markdown": "DRAFT_SECRET phase D",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": null
+       }
+      ],
+      "title": "Phase D (draft only)",
+      "position": 4
+     }
+    ]
+   },
+   "EMPTY:false": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000002",
+     "slug": "empty-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Empty Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.266021+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.266021+00:00",
+     "description": "Empty Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": []
+   },
+   "EMPTY:true": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000002",
+     "slug": "empty-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Empty Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.266021+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.266021+00:00",
+     "description": "Empty Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": []
+   },
+   "UNL:false": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000003",
+     "slug": "unlisted-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Unlisted Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.267439+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.267439+00:00",
+     "description": "Unlisted Book description",
+     "access_level": "UNLISTED",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-00000000000f",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000005",
+        "slug": "unl",
+        "title": "Unlisted step",
+        "status": "Published",
+        "markdown": "UNL text",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": "UNL text"
+       }
+      ],
+      "title": "Unlisted phase",
+      "position": 1
+     }
+    ]
+   },
+   "UNL:true": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000003",
+     "slug": "unlisted-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Unlisted Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.267439+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.267439+00:00",
+     "description": "Unlisted Book description",
+     "access_level": "UNLISTED",
+     "publication_status": "PUBLISHED",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-00000000000f",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000005",
+        "slug": "unl",
+        "title": "Unlisted step",
+        "status": "Published",
+        "markdown": "UNL text",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": "UNL text"
+       }
+      ],
+      "title": "Unlisted phase",
+      "position": 1
+     }
+    ]
+   },
+   "DRAFTBOOK:false": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000004",
+     "slug": "draft-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Draft Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.268454+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.268454+00:00",
+     "description": "Draft Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "DRAFT",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-000000000010",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000006",
+        "slug": null,
+        "title": "Step of a draft book",
+        "status": "Published",
+        "markdown": "DRAFT_SECRET book",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": "DRAFT_SECRET book"
+       }
+      ],
+      "title": "Draft phase",
+      "position": 1
+     }
+    ]
+   },
+   "DRAFTBOOK:true": {
+    "book": {
+     "id": "b0000000-0000-0000-0000-000000000004",
+     "slug": "draft-book",
+     "tags": [
+      "tagA",
+      "tagB"
+     ],
+     "title": "Draft Book",
+     "creator": {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bio": "bio of owner",
+      "name": "Author owner",
+      "avatar_url": "https://img.invalid/owner.png"
+     },
+     "cover_url": null,
+     "created_at": "2026-10-18T11:22:00.268454+00:00",
+     "created_by": "c0000000-0000-0000-0000-000000000001",
+     "difficulty": "BEGINNER",
+     "updated_at": "2026-10-18T11:22:00.268454+00:00",
+     "description": "Draft Book description",
+     "access_level": "PUBLIC",
+     "publication_status": "DRAFT",
+     "estimated_read_time": 0
+    },
+    "phases": [
+     {
+      "id": "f0000000-0000-0000-0000-000000000010",
+      "steps": [
+       {
+        "id": "50000000-0000-0000-0000-000000000006",
+        "slug": null,
+        "title": "Step of a draft book",
+        "status": "Published",
+        "markdown": "DRAFT_SECRET book",
+        "position": 1,
+        "difficulty": null,
+        "visibility": null,
+        "attachments": [],
+        "description": null,
+        "estimatedTime": null,
+        "publishedMarkdown": "DRAFT_SECRET book"
+       }
+      ],
+      "title": "Draft phase",
+      "position": 1
+     }
+    ]
+   }
+  }
+ },
+ "counts": {
+  "anon": [
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "step_count": 2
+   }
+  ],
+  "stranger": [
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "step_count": 2
+   }
+  ],
+  "viewer": [
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "step_count": 2
+   }
+  ],
+  "reviewer": [
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "step_count": 2
+   }
+  ],
+  "editor": [
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "step_count": 2
+   }
+  ],
+  "owner": [
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "step_count": 2
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000003",
+    "step_count": 1
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000004",
+    "step_count": 1
+   }
+  ]
+ },
+ "embed": {
+  "anon": [
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "steps": []
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000002",
+    "steps": []
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "steps": []
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "steps": []
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "steps": []
+   }
+  ],
+  "stranger": [
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "steps": []
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000002",
+    "steps": []
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "steps": []
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "steps": []
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "steps": []
+   }
+  ],
+  "viewer": [
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "steps": []
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000002",
+    "steps": []
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "steps": []
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "steps": []
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "steps": []
+   }
+  ],
+  "reviewer": [
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "steps": [
+     {
+      "id": "50000000-0000-0000-0000-000000000001"
+     },
+     {
+      "id": "50000000-0000-0000-0000-000000000002"
+     }
+    ]
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000002",
+    "steps": []
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "steps": [
+     {
+      "id": "50000000-0000-0000-0000-000000000003"
+     }
+    ]
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "steps": []
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "steps": [
+     {
+      "id": "50000000-0000-0000-0000-000000000004"
+     }
+    ]
+   }
+  ],
+  "editor": [
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "steps": [
+     {
+      "id": "50000000-0000-0000-0000-000000000001"
+     },
+     {
+      "id": "50000000-0000-0000-0000-000000000002"
+     }
+    ]
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000002",
+    "steps": []
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "steps": [
+     {
+      "id": "50000000-0000-0000-0000-000000000003"
+     }
+    ]
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "steps": []
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "steps": [
+     {
+      "id": "50000000-0000-0000-0000-000000000004"
+     }
+    ]
+   }
+  ],
+  "owner": [
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000004",
+    "steps": [
+     {
+      "id": "50000000-0000-0000-0000-000000000006"
+     }
+    ]
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "steps": [
+     {
+      "id": "50000000-0000-0000-0000-000000000001"
+     },
+     {
+      "id": "50000000-0000-0000-0000-000000000002"
+     }
+    ]
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000002",
+    "steps": []
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000003",
+    "steps": [
+     {
+      "id": "50000000-0000-0000-0000-000000000005"
+     }
+    ]
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "steps": [
+     {
+      "id": "50000000-0000-0000-0000-000000000003"
+     }
+    ]
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "steps": []
+   },
+   {
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "steps": [
+     {
+      "id": "50000000-0000-0000-0000-000000000004"
+     }
+    ]
+   }
+  ]
+ },
+ "raw": {
+  "phases": [
+   {
+    "id": "f0000000-0000-0000-0000-000000000010",
+    "book_id": "b0000000-0000-0000-0000-000000000004",
+    "title": "Draft phase",
+    "position": 1
+   },
+   {
+    "id": "f0000000-0000-0000-0000-00000000000a",
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "title": "Phase A",
+    "position": 1
+   },
+   {
+    "id": "f0000000-0000-0000-0000-00000000000e",
+    "book_id": "b0000000-0000-0000-0000-000000000002",
+    "title": "Only phase",
+    "position": 1
+   },
+   {
+    "id": "f0000000-0000-0000-0000-00000000000f",
+    "book_id": "b0000000-0000-0000-0000-000000000003",
+    "title": "Unlisted phase",
+    "position": 1
+   },
+   {
+    "id": "f0000000-0000-0000-0000-00000000000b",
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "title": "Phase B",
+    "position": 2
+   },
+   {
+    "id": "f0000000-0000-0000-0000-00000000000c",
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "title": "Phase C (no steps)",
+    "position": 3
+   },
+   {
+    "id": "f0000000-0000-0000-0000-00000000000d",
+    "book_id": "b0000000-0000-0000-0000-000000000001",
+    "title": "Phase D (draft only)",
+    "position": 4
+   }
+  ],
+  "steps": [
+   {
+    "id": "50000000-0000-0000-0000-000000000001",
+    "phase_id": "f0000000-0000-0000-0000-00000000000a",
+    "title": "Published step",
+    "position": 1,
+    "content": {
+     "slug": "published-step",
+     "status": "Published",
+     "markdown": "DRAFT-EDIT-1 newer unpublished text",
+     "difficulty": "Intermediate",
+     "visibility": "Public",
+     "description": "d1",
+     "estimatedTime": 7,
+     "publishedMarkdown": "PUB-1 published text"
+    }
+   },
+   {
+    "id": "50000000-0000-0000-0000-000000000003",
+    "phase_id": "f0000000-0000-0000-0000-00000000000b",
+    "title": "Legacy step",
+    "position": 1,
+    "content": {
+     "markdown": "LEGACY text of a step without status"
+    }
+   },
+   {
+    "id": "50000000-0000-0000-0000-000000000004",
+    "phase_id": "f0000000-0000-0000-0000-00000000000d",
+    "title": "Draft in phase D",
+    "position": 1,
+    "content": {
+     "status": "Draft",
+     "markdown": "DRAFT_SECRET phase D"
+    }
+   },
+   {
+    "id": "50000000-0000-0000-0000-000000000005",
+    "phase_id": "f0000000-0000-0000-0000-00000000000f",
+    "title": "Unlisted step",
+    "position": 1,
+    "content": {
+     "slug": "unl",
+     "status": "Published",
+     "markdown": "UNL text",
+     "publishedMarkdown": "UNL text"
+    }
+   },
+   {
+    "id": "50000000-0000-0000-0000-000000000006",
+    "phase_id": "f0000000-0000-0000-0000-000000000010",
+    "title": "Step of a draft book",
+    "position": 1,
+    "content": {
+     "status": "Published",
+     "markdown": "DRAFT_SECRET book",
+     "publishedMarkdown": "DRAFT_SECRET book"
+    }
+   },
+   {
+    "id": "50000000-0000-0000-0000-000000000002",
+    "phase_id": "f0000000-0000-0000-0000-00000000000a",
+    "title": "Draft-only step",
+    "position": 2,
+    "content": {
+     "slug": "draft-only",
+     "status": "Draft",
+     "markdown": "DRAFT_SECRET only an editor may read",
+     "description": "d2"
+    }
+   }
+  ]
+ }
+}

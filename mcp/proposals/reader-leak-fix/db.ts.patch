@@ -1,0 +1,87 @@
+--- a/src/services/db.ts	2026-10-17 06:00:42.623247664 +0000
++++ b/src/services/db.ts	2026-10-17 06:38:19.829627227 +0000
+@@ -1,4 +1,5 @@
+ import { insforge } from "@/lib/insforge";
++import { isReaderVisible, readerMarkdown } from "@/lib/reader-visibility";
+ 
+ export interface DBUser {
+   id: string;
+@@ -184,7 +185,11 @@
+   },
+ 
+   async getBookStructure(bookId: string, isReaderView = false) {
+-    const phases = await this.getPhases(bookId);
++    // Reader mode needs the book's status to judge legacy steps that have no status of their own.
++    const [phases, bookStatus] = await Promise.all([
++      this.getPhases(bookId),
++      isReaderView ? this.getBookPublicationStatus(bookId) : Promise.resolve(null),
++    ]);
+     if (phases.length === 0) return [];
+ 
+     const phaseIds = phases.map((p) => p.id);
+@@ -202,29 +207,43 @@
+       return acc;
+     }, {});
+ 
+-    return phases.map((p) => {
+-      const steps = stepsByPhase[p.id] || [];
+-      return {
+-        id: p.id,
+-        title: p.title,
+-        steps: steps.map((s: DBStep) => {
+-          const publishedMd = s.content?.publishedMarkdown;
+-          const currentMd = s.content?.markdown || "";
+-          return {
+-            id: s.id,
+-            title: s.title,
+-            slug: s.content?.slug || "",
+-            markdown: isReaderView && publishedMd !== undefined ? publishedMd : currentMd,
+-            publishedMarkdown: publishedMd,
+-            description: s.content?.description || "",
+-            status: s.content?.status || "Draft",
+-            difficulty: s.content?.difficulty || "Beginner",
+-            estimatedTime: s.content?.estimatedTime || 10,
+-            visibility: s.content?.visibility || "Public"
+-          };
+-        })
+-      };
++    const structure = phases.map((p) => {
++      const steps = (stepsByPhase[p.id] || []).flatMap((s: DBStep) => {
++        let markdown = s.content?.markdown || "";
++        // Reader mode only ever sees published text; drafts are dropped, never substituted.
++        if (isReaderView) {
++          if (!isReaderVisible(s.content, bookStatus)) return [];
++          markdown = readerMarkdown(s.content, bookStatus);
++        }
++        return [{
++          id: s.id,
++          title: s.title,
++          slug: s.content?.slug || "",
++          markdown,
++          publishedMarkdown: isReaderView ? markdown : s.content?.publishedMarkdown,
++          description: s.content?.description || "",
++          status: isReaderView ? "Published" : s.content?.status || "Draft",
++          difficulty: s.content?.difficulty || "Beginner",
++          estimatedTime: s.content?.estimatedTime || 10,
++          visibility: s.content?.visibility || "Public"
++        }];
++      });
++      return { id: p.id, title: p.title, steps };
+     });
++
++    // A phase whose steps are all hidden would reveal unpublished structure and render empty.
++    return isReaderView ? structure.filter((p) => p.steps.length > 0) : structure;
++  },
++
++  async getBookPublicationStatus(bookId: string): Promise<DBBook["publication_status"] | null> {
++    const { data, error } = await insforge.database
++      .from("books")
++      .select("publication_status")
++      .eq("id", bookId)
++      .is("deleted_at", null)
++      .maybeSingle();
++    if (error) throw error;
++    return data?.publication_status ?? null;
+   },
+ 
+   // --- PHASES ---

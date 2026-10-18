@@ -1,0 +1,31 @@
+--- a/02_reader_objects.sql	2026-10-18 10:44:11.388655722 +0000
++++ b/02_reader_objects.sql	2026-10-18 10:44:11.391308724 +0000
+@@ -196,19 +196,26 @@
+ END
+ $$;
+ 
+--- Explicit EXECUTE (see 01): the policies of step 3 and the API call these as anon / authenticated.
++-- Explicit EXECUTE (see 01) only where the CALLER needs it:
++--   reader_markdown         used inside the views: a function in a view is checked against the CALLING user
++--   step_is_reader_visible  called by the select_attachments policy (step 3) as anon / authenticated
++--   reader_book_tree        the API entry point
++-- reader_step_json is NOT granted and is revoked from PUBLIC: it is only called from reader_book_tree, which is
++-- SECURITY DEFINER and therefore runs it with the owner's privileges. It is not part of the API surface.
+ DO $$
+ DECLARE
+     r text;
+ BEGIN
+     FOREACH r IN ARRAY ARRAY['anon', 'authenticated'] LOOP
+         IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
+-            EXECUTE format('GRANT EXECUTE ON FUNCTION public.reader_markdown(jsonb, publication_status), public.step_is_reader_visible(uuid, uuid), public.reader_step_json(public.steps, publication_status, boolean), public.reader_book_tree(uuid, boolean) TO %I', r);
++            EXECUTE format('GRANT EXECUTE ON FUNCTION public.reader_markdown(jsonb, publication_status), public.step_is_reader_visible(uuid, uuid), public.reader_book_tree(uuid, boolean) TO %I', r);
+         END IF;
+     END LOOP;
+ END
+ $$;
+ 
++REVOKE EXECUTE ON FUNCTION public.reader_step_json(public.steps, publication_status, boolean) FROM PUBLIC;
++
+ NOTIFY pgrst, 'reload schema';
+ 
+ COMMIT;

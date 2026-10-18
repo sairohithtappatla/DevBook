@@ -1,0 +1,297 @@
+diff --git a/src/lib/access-level.ts b/src/lib/access-level.ts
+new file mode 100644
+index 0000000..49e51a3
+--- /dev/null
++++ b/src/lib/access-level.ts
+@@ -0,0 +1,38 @@
++// Single source of truth for books.access_level (enum access_level in the database).
++// Every value the database accepts is listed here; nothing else may be written to the column.
++export const ACCESS_LEVELS = ["PUBLIC", "UNLISTED", "PRIVATE", "FOLLOWERS_ONLY", "SELECTED_USERS"] as const;
++export type AccessLevel = (typeof ACCESS_LEVELS)[number];
++
++export type VisibilityLabel = "Public" | "Unlisted" | "Followers" | "Selected" | "Private" | "Unknown";
++
++const LABELS: Record<AccessLevel, VisibilityLabel> = {
++  PUBLIC: "Public",
++  UNLISTED: "Unlisted",
++  PRIVATE: "Private",
++  FOLLOWERS_ONLY: "Followers",
++  SELECTED_USERS: "Selected",
++};
++
++// Levels the visibility menu may WRITE. SELECTED_USERS needs a list of users (book_access) that this app has no
++// screen for, so it is displayed and preserved but never chosen from the menu.
++export const SELECTABLE_ACCESS_LEVELS: readonly AccessLevel[] = ["PUBLIC", "UNLISTED", "FOLLOWERS_ONLY", "PRIVATE"];
++
++export function isAccessLevel(value: unknown): value is AccessLevel {
++  return typeof value === "string" && (ACCESS_LEVELS as readonly string[]).includes(value);
++}
++
++// A value outside the enum is shown as "Unknown", never silently as another level.
++export function visibilityLabel(level: unknown): VisibilityLabel {
++  return isAccessLevel(level) ? LABELS[level] : "Unknown";
++}
++
++// Lower-case form used by the reader's Book type. Unknown values fall back to the most restrictive label.
++export function readerVisibility(level: unknown): "public" | "unlisted" | "private" | "followers" | "selected" {
++  switch (level) {
++    case "PUBLIC": return "public";
++    case "UNLISTED": return "unlisted";
++    case "FOLLOWERS_ONLY": return "followers";
++    case "SELECTED_USERS": return "selected";
++    default: return "private";
++  }
++}
+diff --git a/src/lib/book-utils.ts b/src/lib/book-utils.ts
+index 33aebbc..589cce6 100644
+--- a/src/lib/book-utils.ts
++++ b/src/lib/book-utils.ts
+@@ -26,7 +26,7 @@ export type Book = {
+   category: string;
+   creator: { username: string; name: string; avatar: string; bio?: string };
+   cover: string;
+-  visibility: "public" | "private" | "followers";
++  visibility: "public" | "unlisted" | "private" | "followers" | "selected";
+   status: "published" | "draft";
+   updatedAt: string;
+   phases: Phase[];
+diff --git a/src/routes/books/BookEditorPage.tsx b/src/routes/books/BookEditorPage.tsx
+index 162179e..c532f3f 100644
+--- a/src/routes/books/BookEditorPage.tsx
++++ b/src/routes/books/BookEditorPage.tsx
+@@ -48,7 +48,19 @@ import {
+   Loader2,
+   Lock,
+   Users,
++  Link2,
++  UserCheck,
++  HelpCircle,
+ } from "lucide-react";
++import { SELECTABLE_ACCESS_LEVELS, visibilityLabel, type AccessLevel } from "@/lib/access-level";
++
++const VISIBILITY_ICONS: Record<AccessLevel, typeof Globe> = {
++  PUBLIC: Globe,
++  UNLISTED: Link2,
++  PRIVATE: Lock,
++  FOLLOWERS_ONLY: Users,
++  SELECTED_USERS: UserCheck,
++};
+ 
+ type StepNode = {
+   id: string;
+@@ -740,16 +752,13 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
+     return () => document.removeEventListener("mousedown", onDoc);
+   }, [menuOpen]);
+ 
+-  const handleBookVisibilityChange = async (vis: "public" | "private" | "followers") => {
++  // Writes ONLY access_level, and only when the book is loaded, no save is in flight and the value really changes.
++  // Optimistic update and rollback stay in useUpdateBook (onMutate / onError).
++  const handleBookVisibilityChange = async (next: AccessLevel) => {
++    if (!dbBook || updateBookMutation.isPending || next === dbBook.access_level) return;
+     try {
+-      await updateBookMutation.mutateAsync({
+-        bookId,
+-        updates: {
+-          title: dbBook?.title || "",
+-          access_level: vis === "public" ? "PUBLIC" : vis === "private" ? "PRIVATE" : "FOLLOWERS",
+-        },
+-      });
+-      showToast(`Book visibility set to ${vis}`, "success");
++      await updateBookMutation.mutateAsync({ bookId, updates: { access_level: next } });
++      showToast(`Book visibility set to ${visibilityLabel(next)}`, "success");
+     } catch (err) {
+       showToast("Failed to update visibility", "error");
+     }
+@@ -1030,19 +1039,11 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
+                       onClick={() => setMenuOpen(!menuOpen)}
+                       className="inline-flex h-[22px] items-center gap-1 rounded-md border border-hairline bg-surface-2 px-2 text-[10px] font-semibold text-text-primary hover:text-foreground hover:border-foreground/20 cursor-pointer transition-colors select-none"
+                     >
+-                      {dbBook?.access_level === "PUBLIC" ? (
+-                        <>
+-                          <Globe className="h-3 w-3 text-muted-foreground" /> Public
+-                        </>
+-                      ) : dbBook?.access_level === "PRIVATE" ? (
+-                        <>
+-                          <Lock className="h-3 w-3 text-muted-foreground" /> Private
+-                        </>
+-                      ) : (
+-                        <>
+-                          <Users className="h-3 w-3 text-muted-foreground" /> Followers
+-                        </>
+-                      )}
++                      {(() => {
++                        const Icon = VISIBILITY_ICONS[dbBook?.access_level as AccessLevel] ?? HelpCircle;
++                        return <Icon className="h-3 w-3 text-muted-foreground" />;
++                      })()}
++                      {visibilityLabel(dbBook?.access_level)}
+                     </button>
+                     {menuOpen && (
+                       <div className="absolute right-0 top-full z-50 mt-1 w-44 overflow-hidden rounded-lg border border-hairline bg-card shadow-lg">
+@@ -1050,34 +1051,32 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
+                           Visibility
+                         </div>
+                         <div className="py-1">
+-                          {([
+-                            { v: "public", icon: Globe, label: "Public" },
+-                            { v: "private", icon: Lock, label: "Private" },
+-                            { v: "followers", icon: Users, label: "Followers" },
+-                          ] as const).map(({ v, icon: Icon, label }) => (
+-                            <button
+-                              key={v}
+-                              onClick={() => {
+-                                handleBookVisibilityChange(v);
+-                                setMenuOpen(false);
+-                              }}
+-                              className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-surface-2 cursor-pointer ${
+-                                (dbBook?.access_level === "PUBLIC" && v === "public") ||
+-                                (dbBook?.access_level === "PRIVATE" && v === "private") ||
+-                                (dbBook?.access_level === "FOLLOWERS" && v === "followers")
+-                                  ? "bg-surface-2 font-bold text-foreground"
+-                                  : "text-muted-foreground hover:text-foreground"
+-                              }`}
+-                            >
+-                              <Icon className="h-3.5 w-3.5" />
+-                              <span className="flex-1">{label}</span>
+-                              {((dbBook?.access_level === "PUBLIC" && v === "public") ||
+-                                (dbBook?.access_level === "PRIVATE" && v === "private") ||
+-                                (dbBook?.access_level === "FOLLOWERS" && v === "followers")) && (
+-                                <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+-                              )}
+-                            </button>
+-                          ))}
++                          {(dbBook && !SELECTABLE_ACCESS_LEVELS.includes(dbBook.access_level)
++                            ? [dbBook.access_level, ...SELECTABLE_ACCESS_LEVELS]
++                            : SELECTABLE_ACCESS_LEVELS
++                          ).map((level) => {
++                            const Icon = VISIBILITY_ICONS[level];
++                            const current = dbBook?.access_level === level;
++                            return (
++                              <button
++                                key={level}
++                                disabled={current}
++                                onClick={() => {
++                                  handleBookVisibilityChange(level);
++                                  setMenuOpen(false);
++                                }}
++                                className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-surface-2 cursor-pointer ${
++                                  current
++                                    ? "bg-surface-2 font-bold text-foreground"
++                                    : "text-muted-foreground hover:text-foreground"
++                                }`}
++                              >
++                                <Icon className="h-3.5 w-3.5" />
++                                <span className="flex-1">{visibilityLabel(level)}</span>
++                                {current && <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />}
++                              </button>
++                            );
++                          })}
+                         </div>
+                       </div>
+                     )}
+diff --git a/src/routes/books/BookReaderPage.tsx b/src/routes/books/BookReaderPage.tsx
+index f613218..14ef36b 100644
+--- a/src/routes/books/BookReaderPage.tsx
++++ b/src/routes/books/BookReaderPage.tsx
+@@ -7,6 +7,7 @@ import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
+ import { useBook, useBookStructure } from "@/hooks/useBooks";
+ import { findStep, flattenSteps, type Book } from "@/lib/book-utils";
+ import { useProgress } from "@/stores/progress";
++import { readerVisibility } from "@/lib/access-level";
+ 
+ type Props = {
+   bookId: string;
+@@ -75,7 +76,7 @@ export function BookReaderPage({ bookId, onBack, onEdit }: Props) {
+         bio: dbBook.creator?.bio || undefined,
+       },
+       cover: dbBook.cover_url || "workflow",
+-      visibility: (dbBook.access_level?.toLowerCase() || "public") as any,
++      visibility: readerVisibility(dbBook.access_level),
+       status: (dbBook.publication_status?.toLowerCase() || "published") as any,
+       updatedAt: dbBook.updated_at || dbBook.created_at || new Date().toISOString(),
+       phases,
+diff --git a/src/routes/books/MyBooksPage.tsx b/src/routes/books/MyBooksPage.tsx
+index 89cda6b..309b9c0 100644
+--- a/src/routes/books/MyBooksPage.tsx
++++ b/src/routes/books/MyBooksPage.tsx
+@@ -8,6 +8,7 @@ import {
+   Database,
+   Eye,
+   Globe,
++  Link2,
+   Lock,
+   Pencil,
+   Plus,
+@@ -18,6 +19,7 @@ import {
+   Trash2,
+   RefreshCw,
+ } from "lucide-react";
++import { visibilityLabel, type VisibilityLabel } from "@/lib/access-level";
+ import { CreateBookModal } from "@/components/modals/CreateBookModal";
+ import { useBooks, useBookStepCounts, useCreateBook, useDeleteBook } from "@/hooks/useBooks";
+ import { useAuth } from "@/hooks/useAuth";
+@@ -34,7 +36,7 @@ type BookItem = {
+   description: string;
+   phases: number;
+   steps: number;
+-  visibility: "Public" | "Followers" | "Selected" | "Private";
++  visibility: VisibilityLabel;
+   updatedDate: string;
+   updatedRelative: string;
+   status: "Published" | "Draft" | "Archived";
+@@ -53,14 +55,7 @@ function mapDBBookToBookItem(dbBook: BookRecord, stepCounts?: Record<string, num
+     description: dbBook.description || "Developer guide draft",
+     phases: stepCount ? Math.ceil(stepCount / 3) : 0,
+     steps: stepCount,
+-    visibility:
+-      dbBook.access_level === "FOLLOWERS"
+-        ? "Followers"
+-        : dbBook.access_level === "SELECTED"
+-          ? "Selected"
+-          : dbBook.access_level === "PRIVATE"
+-            ? "Private"
+-            : "Public",
++    visibility: visibilityLabel(dbBook.access_level),
+     updatedDate: dateValue
+       ? new Date(dateValue).toLocaleDateString("en-US", {
+           month: "short",
+@@ -407,6 +402,13 @@ function getVisibilityBadge(visibility: BookItem["visibility"]) {
+           Selected
+         </span>
+       );
++    case "Unlisted":
++      return (
++        <span className="badge badge-private">
++          <Link2 className="badge-icon" />
++          Unlisted
++        </span>
++      );
+     case "Private":
+       return (
+         <span className="badge badge-private">
+@@ -414,6 +416,8 @@ function getVisibilityBadge(visibility: BookItem["visibility"]) {
+           Private
+         </span>
+       );
++    case "Unknown":
++      return <span className="badge badge-private">Unknown</span>;
+   }
+ }
+ 
+diff --git a/src/services/db.ts b/src/services/db.ts
+index 2f74eba..3cb7924 100644
+--- a/src/services/db.ts
++++ b/src/services/db.ts
+@@ -1,3 +1,4 @@
++import type { AccessLevel } from "@/lib/access-level";
+ import { insforge } from "@/lib/insforge";
+ 
+ export interface DBUser {
+@@ -33,7 +34,7 @@ export interface DBBook {
+   description: string | null;
+   cover_url: string | null;
+   publication_status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
+-  access_level: "PUBLIC" | "FOLLOWERS" | "SELECTED" | "PRIVATE";
++  access_level: AccessLevel;
+   estimated_read_time: number;
+   difficulty: "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
+   tags: string[];

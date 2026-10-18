@@ -1,0 +1,348 @@
+diff --git a/src/app/router.tsx b/src/app/router.tsx
+index 45219d5..67381d2 100644
+--- a/src/app/router.tsx
++++ b/src/app/router.tsx
+@@ -20,7 +20,7 @@ import { ProgressPage } from "@/routes/progress/ProgressPage";
+ import { ProfilePage } from "@/routes/profile/ProfilePage";
+ import { AuthorsPage } from "@/routes/authors/AuthorsPage";
+ import { LandingPage } from "@/routes/landing/LandingPage";
+-import { useBook } from "@/hooks/useBooks";
++import { useReaderBook } from "@/hooks/useBooks";
+ import { Loader2 } from "lucide-react";
+ import { SearchProvider } from "@/providers/SearchProvider";
+ import { useState, useEffect } from "react";
+@@ -178,9 +178,9 @@ function ReaderRouteComponent() {
+   const { bookId } = useParams({ from: readerRoute.id });
+   const navigate = useNavigate();
+   const { isAuthenticated, user } = useAuth();
+-  const { data: dbBook } = useBook(bookId);
++  const { data: tree } = useReaderBook(bookId);
+ 
+-  const canEdit = isAuthenticated && user && dbBook && dbBook.created_by === user.id;
++  const canEdit = isAuthenticated && user && tree && tree.book.created_by === user.id;
+ 
+   return (
+     <BookReaderPage
+diff --git a/src/hooks/useBooks.ts b/src/hooks/useBooks.ts
+index 6906476..05edb47 100644
+--- a/src/hooks/useBooks.ts
++++ b/src/hooks/useBooks.ts
+@@ -1,5 +1,6 @@
+ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+ import { DBService, type DBBook } from "@/services/db";
++import type { ReaderTree } from "@/lib/reader-tree";
+ 
+ export function useBooks() {
+   return useQuery<DBBook[]>({
+@@ -8,14 +9,26 @@ export function useBooks() {
+   });
+ }
+ 
+-export function useBookStepCounts(bookIds: string[]) {
++export function useBookStepCounts(bookIds: string[], opts: { includeDrafts?: boolean } = {}) {
++  const includeDrafts = !!opts.includeDrafts;
+   return useQuery<Record<string, number>>({
+-    queryKey: ["book-step-counts", bookIds],
+-    queryFn: () => DBService.getStepCounts(bookIds),
++    queryKey: ["book-step-counts", bookIds, includeDrafts],
++    queryFn: () => DBService.getStepCounts(bookIds, { includeDrafts }),
+     enabled: bookIds.length > 0,
+   });
+ }
+ 
++// One request for the reader: book, creator and visible structure. Key starts with ["book-structure", id] so the
++// existing invalidation of that prefix also refreshes it. staleTime 0: access rules and publication state can change.
++export function useReaderBook(bookId: string | null) {
++  return useQuery<ReaderTree | null>({
++    queryKey: ["book-structure", bookId, "reader-tree"],
++    queryFn: () => (bookId ? DBService.getReaderTree(bookId, true) : Promise.resolve(null)),
++    enabled: !!bookId,
++    staleTime: 0,
++  });
++}
++
+ export function useBook(bookId: string | null) {
+   return useQuery<DBBook | null>({
+     queryKey: ["book", bookId],
+diff --git a/src/lib/reader-tree.ts b/src/lib/reader-tree.ts
+new file mode 100644
+index 0000000..c4f09ca
+--- /dev/null
++++ b/src/lib/reader-tree.ts
+@@ -0,0 +1,119 @@
++// Contract of the database function public.reader_book_tree(target_book_id uuid, include_drafts boolean) -> jsonb
++// (mcp/proposals/rls-hardening/02_reader_objects.sql) and its mapping onto the shapes the reader UI already uses.
++//
++// Output of the function:
++//   null                                   book missing, not readable by the caller, or soft-deleted and caller is not its owner
++//   { book, phases }
++//   book   = { id, title, slug, description, cover_url, publication_status, access_level, estimated_read_time,
++//              difficulty, tags, created_by, created_at, updated_at, creator: {id,name,avatar_url,bio} | null }
++//   phases = [{ id, title, position, steps: [step...] }]   only phases that contain at least one visible step
++//   step   = { id, title, position, slug, description, difficulty, estimatedTime, visibility, status, markdown,
++//              publishedMarkdown, attachments: [{ id, file_name, storage_path, file_type, file_size }] }
++//            slug/description/difficulty/estimatedTime/visibility/publishedMarkdown may be JSON null.
++//   include_drafts=false (or caller may not view drafts): only published text; status "Published"; markdown == publishedMarkdown.
++//   include_drafts=true and caller is OWNER/EDITOR/REVIEWER: also unpublished steps; markdown is the DRAFT text and
++//   publishedMarkdown is the published text or null.
++import type { DBBook, DBUser } from "@/services/db";
++
++export type ReaderTreeAttachment = {
++  id: string;
++  file_name: string;
++  storage_path: string;
++  file_type: string;
++  file_size: number | null;
++};
++
++export type ReaderTreeStep = {
++  id: string;
++  title: string;
++  position: number;
++  slug: string | null;
++  description: string | null;
++  difficulty: "Beginner" | "Intermediate" | "Advanced" | null;
++  estimatedTime: number | null;
++  visibility: "Public" | "Followers" | "Selected" | "Private" | null;
++  status: string;
++  markdown: string;
++  publishedMarkdown: string | null;
++  attachments: ReaderTreeAttachment[];
++};
++
++export type ReaderTree = {
++  book: Omit<DBBook, "creator"> & { creator: DBUser | null };
++  phases: { id: string; title: string; position: number; steps: ReaderTreeStep[] }[];
++};
++
++// Same shape DBService.getBookStructure() returns today (plus attachments, which the UI does not use yet).
++export type ReaderStructurePhase = {
++  id: string;
++  title: string;
++  steps: {
++    id: string;
++    title: string;
++    slug: string;
++    markdown: string;
++    publishedMarkdown: string | undefined;
++    description: string;
++    status: string;
++    difficulty: string;
++    estimatedTime: number;
++    visibility: string;
++    attachments: ReaderTreeAttachment[];
++  }[];
++};
++
++const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
++
++// null stays null ("no access / not found"); anything that is not the documented shape throws instead of rendering a
++// wrong book.
++export function parseReaderTree(raw: unknown): ReaderTree | null {
++  if (raw === null || raw === undefined) return null;
++  if (!isObj(raw) || !isObj(raw.book) || typeof raw.book.id !== "string" || !Array.isArray(raw.phases)) {
++    throw new Error("Unexpected reader_book_tree response");
++  }
++  for (const p of raw.phases) {
++    if (!isObj(p) || typeof p.id !== "string" || !Array.isArray(p.steps)) throw new Error("Unexpected reader_book_tree response");
++    for (const s of p.steps) {
++      if (!isObj(s) || typeof s.id !== "string" || typeof s.title !== "string") throw new Error("Unexpected reader_book_tree response");
++    }
++  }
++  return raw as unknown as ReaderTree;
++}
++
++export function treeToBook(tree: ReaderTree): DBBook {
++  return { ...tree.book, creator: tree.book.creator ?? null };
++}
++
++// Mirrors getBookStructure(bookId, isReaderView = true): published text wins when present, otherwise the current text,
++// and the same defaults apply to missing metadata.
++export function treeToStructure(tree: ReaderTree): ReaderStructurePhase[] {
++  return [...tree.phases]
++    .sort((a, b) => a.position - b.position)
++    .map((p) => ({
++      id: p.id,
++      title: p.title,
++      steps: [...p.steps]
++        .sort((a, b) => a.position - b.position)
++        .map((s) => {
++          const published = s.publishedMarkdown === null ? undefined : s.publishedMarkdown;
++          return {
++            id: s.id,
++            title: s.title,
++            slug: s.slug || "",
++            markdown: published !== undefined ? published : s.markdown || "",
++            publishedMarkdown: published,
++            description: s.description || "",
++            status: s.status || "Draft",
++            difficulty: s.difficulty || "Beginner",
++            estimatedTime: s.estimatedTime || 10,
++            visibility: s.visibility || "Public",
++            attachments: s.attachments ?? [],
++          };
++        }),
++    }));
++}
++
++// Every step id the caller can see in this tree (what resetBookProgress must clear).
++export function treeStepIds(tree: ReaderTree | null): string[] {
++  return tree ? tree.phases.flatMap((p) => p.steps.map((s) => s.id)) : [];
++}
+diff --git a/src/routes/books/BookReaderPage.tsx b/src/routes/books/BookReaderPage.tsx
+index f613218..9948334 100644
+--- a/src/routes/books/BookReaderPage.tsx
++++ b/src/routes/books/BookReaderPage.tsx
+@@ -4,7 +4,8 @@ import { TopBar } from "@/components/layout/TopBar";
+ import { Markdown } from "@/components/Markdown";
+ import { extractHeadings } from "@/lib/markdown-utils";
+ import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
+-import { useBook, useBookStructure } from "@/hooks/useBooks";
++import { useReaderBook } from "@/hooks/useBooks";
++import { treeToBook, treeToStructure } from "@/lib/reader-tree";
+ import { findStep, flattenSteps, type Book } from "@/lib/book-utils";
+ import { useProgress } from "@/stores/progress";
+ 
+@@ -35,8 +36,9 @@ const EMPTY_BOOK: Book = {
+ };
+ 
+ export function BookReaderPage({ bookId, onBack, onEdit }: Props) {
+-  const { data: dbBook, isLoading: isBookLoading } = useBook(bookId);
+-  const { data: dbBookStructure } = useBookStructure(bookId, true);
++  const { data: tree, isLoading: isBookLoading } = useReaderBook(bookId);
++  const dbBook = useMemo(() => (tree ? treeToBook(tree) : null), [tree]);
++  const dbBookStructure = useMemo(() => (tree ? treeToStructure(tree) : undefined), [tree]);
+   const markLast = useProgress((s) => s.markLast);
+ 
+   // Map dbBook and dbBookStructure to match standard Book structure
+diff --git a/src/routes/books/MyBooksPage.tsx b/src/routes/books/MyBooksPage.tsx
+index 89cda6b..f8de91e 100644
+--- a/src/routes/books/MyBooksPage.tsx
++++ b/src/routes/books/MyBooksPage.tsx
+@@ -131,7 +131,7 @@ export function MyBooksPage({
+ } = {}) {
+   const { data: dbBooks = [], refetch: refetchBooks, isFetching: isFetchingBooks } = useBooks();
+   const bookIds = useMemo(() => dbBooks.map((book) => book.id), [dbBooks]);
+-  const { data: stepCounts, refetch: refetchCounts, isFetching: isFetchingCounts } = useBookStepCounts(bookIds);
++  const { data: stepCounts, refetch: refetchCounts, isFetching: isFetchingCounts } = useBookStepCounts(bookIds, { includeDrafts: true });
+   
+   const handleRefresh = async () => {
+     await Promise.all([refetchBooks(), refetchCounts()]);
+diff --git a/src/routes/progress/ProgressPage.tsx b/src/routes/progress/ProgressPage.tsx
+index 734e234..44214dd 100644
+--- a/src/routes/progress/ProgressPage.tsx
++++ b/src/routes/progress/ProgressPage.tsx
+@@ -94,7 +94,7 @@ function BookCoverSVG({ type }: { type: string }) {
+ export function ProgressPage({ onBookSelect }: { onBookSelect?: (bookId: string) => void } = {}) {
+   const { data: dbBooks = [] } = useBooks();
+   const bookIds = useMemo(() => dbBooks.map((b) => b.id), [dbBooks]);
+-  const { data: stepCounts } = useBookStepCounts(bookIds);
++  const { data: stepCounts } = useBookStepCounts(bookIds, { includeDrafts: true });
+ 
+   const books = useMemo(() => {
+     return dbBooks.map((b) => mapDBBookToProgressBook(b, stepCounts));
+diff --git a/src/services/db.ts b/src/services/db.ts
+index 2f74eba..7238934 100644
+--- a/src/services/db.ts
++++ b/src/services/db.ts
+@@ -1,4 +1,5 @@
+ import { insforge } from "@/lib/insforge";
++import { parseReaderTree, treeStepIds, type ReaderTree } from "@/lib/reader-tree";
+ 
+ export interface DBUser {
+   id: string;
+@@ -168,21 +169,46 @@ export const DBService = {
+     if (error) throw error;
+   },
+ 
+-  async getStepCounts(bookIds: string[]): Promise<Record<string, number>> {
++  // Step counts. Default = what any reader may see (view reader_book_step_counts: published steps of discoverable books).
++  // includeDrafts = true also counts unpublished steps for people who may view drafts (OWNER/EDITOR/REVIEWER): the
++  // base-table embed is only populated for them, so the per-book maximum of both numbers is used.
++  async getStepCounts(bookIds: string[], opts: { includeDrafts?: boolean } = {}): Promise<Record<string, number>> {
+     if (bookIds.length === 0) return {};
+-    const { data, error } = await insforge.database
+-      .from("phases")
+-      .select("book_id, steps(id)")
++    const { data: viewRows, error: viewError } = await insforge.database
++      .from("reader_book_step_counts")
++      .select("book_id, step_count")
+       .in("book_id", bookIds);
+-    if (error) throw error;
++    if (viewError) throw viewError;
+     const counts: Record<string, number> = {};
+-    for (const p of (data || []) as DBPhaseWithSteps[]) {
+-      const stepCount = p.steps?.length || 0;
+-      counts[p.book_id] = (counts[p.book_id] || 0) + stepCount;
++    for (const r of (viewRows || []) as { book_id: string; step_count: number }[]) {
++      counts[r.book_id] = r.step_count || 0;
++    }
++    if (opts.includeDrafts) {
++      const { data, error } = await insforge.database
++        .from("phases")
++        .select("book_id, steps(id)")
++        .in("book_id", bookIds);
++      if (error) throw error;
++      const withDrafts: Record<string, number> = {};
++      for (const p of (data || []) as DBPhaseWithSteps[]) {
++        withDrafts[p.book_id] = (withDrafts[p.book_id] || 0) + (p.steps?.length || 0);
++      }
++      for (const [id, n] of Object.entries(withDrafts)) counts[id] = Math.max(counts[id] || 0, n);
+     }
+     return counts;
+   },
+ 
++  // The reader's single read: book + creator + visible phases/steps (+ attachments) from reader_book_tree.
++  // includeDrafts only has an effect for OWNER/EDITOR/REVIEWER; the function ignores it for everyone else.
++  async getReaderTree(bookId: string, includeDrafts = true): Promise<ReaderTree | null> {
++    const { data, error } = await insforge.database.rpc("reader_book_tree", {
++      target_book_id: bookId,
++      include_drafts: includeDrafts,
++    });
++    if (error) throw error;
++    return parseReaderTree(data);
++  },
++
+   async getBookStructure(bookId: string, isReaderView = false) {
+     const phases = await this.getPhases(bookId);
+     if (phases.length === 0) return [];
+@@ -363,29 +389,16 @@ export const DBService = {
+   },
+ 
+   async resetBookProgress(userId: string, bookId: string): Promise<void> {
+-    const { data: phases, error: phasesError } = await insforge.database
+-      .from("phases")
+-      .select("id")
+-      .eq("book_id", bookId);
+-    if (phasesError) throw phasesError;
+-
+-    const phaseIds = phases?.map((p) => p.id) || [];
+-    if (phaseIds.length > 0) {
+-      const { data: steps, error: stepsError } = await insforge.database
+-        .from("steps")
+-        .select("id")
+-        .in("phase_id", phaseIds);
+-      if (stepsError) throw stepsError;
+-
+-      const stepIds = steps?.map((s) => s.id) || [];
+-      if (stepIds.length > 0) {
+-        const { error: spError } = await insforge.database
+-          .from("step_progress")
+-          .delete()
+-          .eq("user_id", userId)
+-          .in("step_id", stepIds);
+-        if (spError) throw spError;
+-      }
++    // Step ids come from the same function the reader uses (drafts included for people who may see them), because
++    // non-draft readers can no longer select from `phases` -> `steps` directly.
++    const stepIds = treeStepIds(await this.getReaderTree(bookId, true));
++    if (stepIds.length > 0) {
++      const { error: spError } = await insforge.database
++        .from("step_progress")
++        .delete()
++        .eq("user_id", userId)
++        .in("step_id", stepIds);
++      if (spError) throw spError;
+     }
+ 
+     const { error: bpError } = await insforge.database
