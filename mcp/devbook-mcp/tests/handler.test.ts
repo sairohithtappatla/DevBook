@@ -1,7 +1,8 @@
 // Local tests for the DevBook MCP handler against an in-memory store. SIMULATED: no InsForge, no network, no real database.
 // Run: deno test --allow-net=127.0.0.1 --allow-env --allow-read=./handler.ts,./sql,../proposals/rls-hardening/final tests/
 import { assert, assertEquals, assertNotEquals, assertStringIncludes } from "jsr:@std/assert@1.0.13";
-import { authenticate, availableTools, callTool, createHandler, makeConfirmation, RateLimiter, sha256Hex, StoreError, type Deps, type Principal } from "../handler.ts";
+import { APPEND_RETRY_DEFAULTS, DURABLE_LIMITS, legacyReaderText, authenticate, availableTools, callTool, createHandler, createInsforgeStore, isAmbiguousLegacyStep, makeConfirmation, RateLimiter, readerText, sha256Hex, StoreError, type Deps, type Principal } from "../handler.ts";
+import { isReaderVisible, readerMarkdown } from "../../proposals/reader-leak-fix/reader-visibility.ts";
 import { FakeStore } from "./fake-store.ts";
 
 // ---------------------------------------------------------------- fixture
@@ -190,15 +191,15 @@ Deno.test("draft isolation: VIEWER and strangers never receive draft text; OWNER
   assertEquals(code(await tool(env, env.tok.viewer, "get_step_content", { step_id: ID.s2 })), "NOT_FOUND");
   const v = await tool(env, env.tok.viewer, "get_step_content", { step_id: ID.s1, include_published: true });
   assertEquals(v.data.markdown, PUB_TEXT); assert(!v.text.includes(DRAFT_CANARY)); assertEquals(v.data.revision, undefined);
-  const legacy = await tool(env, env.tok.viewer, "get_step_content", { step_id: ID.s3 });
-  assertEquals(legacy.data.markdown, "legacy text"); // book PUBLISHED + status missing -> legacy rule
+  // strict reader rule (07): a legacy step that was never frozen (no publishedMarkdown) is not reader-visible at all
+  assertEquals(code(await tool(env, env.tok.viewer, "get_step_content", { step_id: ID.s3 })), "NOT_FOUND");
   // structure, metadata, search, status for the viewer contain no draft trace
   for (const [name, args] of [["get_book_structure", { book_id: ID.bk1 }], ["get_book_metadata", { book_id: ID.bk1 }], ["search_content", { query: "secret" }], ["search_content", { query: DRAFT_CANARY }], ["get_publication_status", { step_id: ID.s1 }], ["get_publication_status", { book_id: ID.bk1 }]] as const) {
     const r = await tool(env, env.tok.viewer, name, args);
     assert(!r.text.includes(DRAFT_CANARY) && !r.text.includes("Draft only step") && !r.text.includes("draft-only"), `${name} leaked a draft to a viewer`);
   }
   const structure = await tool(env, env.tok.viewer, "get_book_structure", { book_id: ID.bk1 });
-  assertEquals(structure.data.phases[0].steps.map((s: { id: string }) => s.id), [ID.s1, ID.s3]);
+  assertEquals(structure.data.phases[0].steps.map((s: { id: string }) => s.id), [ID.s1]);
   const ownerStructure = await tool(env, env.tok.owner, "get_book_structure", { book_id: ID.bk1 });
   assertEquals(ownerStructure.data.phases[0].steps.map((s: { id: string }) => s.id), [ID.s1, ID.s2, ID.s3]);
   assertEquals((await tool(env, env.tok.reviewer, "search_content", { query: DRAFT_CANARY })).data.results.length, 2);
@@ -221,7 +222,7 @@ Deno.test("write authorization: only OWNER/EDITOR; viewer/reviewer forbidden; st
   const before = env.store.snapshot();
   const rev = env.store.step(ID.s2).updated_at;
   for (const who of ["viewer", "reviewer"] as const) {
-    assertEquals(code(await tool(env, env.tok[who], "create_phase", { book_id: ID.bk1, title: "N" })), who === "viewer" ? "FORBIDDEN_ROLE" : "FORBIDDEN_ROLE");
+    assertEquals(code(await tool(env, env.tok[who], "create_phase", { book_id: ID.bk1, title: "N" })), "FORBIDDEN_ROLE", who);
     assertEquals(code(await tool(env, env.tok[who], "update_draft", { step_id: ID.s1, expected_revision: env.store.step(ID.s1).updated_at, markdown: "x", change_summary: "c" })), "FORBIDDEN_ROLE");
   }
   assertEquals(code(await tool(env, env.tok.viewer, "update_draft", { step_id: ID.s2, expected_revision: rev, markdown: "x", change_summary: "c" })), "NOT_FOUND"); // hidden draft step
@@ -300,6 +301,12 @@ Deno.test("update_draft concurrency: stale revision, replay, editor autosave in 
 Deno.test("update_step_metadata keeps slug and markdown; needs a field and a current revision", async () => {
   const env = await setup();
   const rev = env.store.step(ID.s1).updated_at;
+  // s1 is reader-visible, so a token without the publish scope may not change its (undrafted) metadata
+  const draftOnly = await mkToken(env.store, U.owner, { scopes: ["read", "draft"] });
+  assertEquals(code(await tool(env, draftOnly, "update_step_metadata", { step_id: ID.s1, expected_revision: rev, title: "Sneaky" })), "FORBIDDEN_SCOPE");
+  assertEquals(env.store.step(ID.s1).title, "Published step");
+  // ...but it may on a draft-only step, which readers cannot see
+  assertEquals((await tool(env, draftOnly, "update_step_metadata", { step_id: ID.s2, expected_revision: env.store.step(ID.s2).updated_at, title: "Draft renamed" })).isError, undefined);
   const r = await tool(env, env.tok.owner, "update_step_metadata", { step_id: ID.s1, expected_revision: rev, title: "Renamed", difficulty: "Advanced", estimated_minutes: 30, description: "new" });
   assertEquals(r.isError, undefined);
   const c = env.store.step(ID.s1).content;
@@ -369,9 +376,11 @@ Deno.test("publish_draft: every confirmation failure mode is refused and writes 
   assertEquals(code(await go({ confirmation_token: `${b}.${s.slice(0, -2)}AA` })), "CONFIRMATION_INVALID"); // bad signature
   assertEquals(code(await go({ confirmation_token: `${btoa(JSON.stringify({ sub: U.owner, step: ID.s2, rev: "x", h: "y", exp: 9e15 }))}.${s}` })), "CONFIRMATION_INVALID"); // tampered payload
   assertEquals(code(await go({ confirmation_token: "not.a.token.at.all.really-not" })), "CONFIRMATION_INVALID");
-  assertEquals(code(await go({}, "editor")), "CONFIRMATION_INVALID"); // token minted for another user
+  const forEditor = await makeConfirmation(env.key, { op: "publish_draft", sub: U.editor, tid: "t", step: ID.s2, rev: env.store.step(ID.s2).updated_at, h: await sha256Hex(`secret draft ${DRAFT_CANARY}`), exp: env.now.t + 1e6 });
+  assertEquals(code(await go({ confirmation_token: forEditor })), "CONFIRMATION_INVALID"); // validly signed, but minted for another user
+  assertEquals(code(await go({}, "editor")), "FORBIDDEN_ROLE"); // editors cannot publish through MCP at all (owner-only)
   assertEquals(code(await go({}, "owner", ID.s1)), "CONFIRMATION_INVALID"); // token for another step
-  const otherKey = await makeConfirmation(crypto.getRandomValues(new Uint8Array(32)), { sub: U.owner, step: ID.s2, rev: env.store.step(ID.s2).updated_at, h: await sha256Hex(`secret draft ${DRAFT_CANARY}`), exp: env.now.t + 1e6 });
+  const otherKey = await makeConfirmation(crypto.getRandomValues(new Uint8Array(32)), { op: "publish_draft", sub: U.owner, tid: "t", step: ID.s2, rev: env.store.step(ID.s2).updated_at, h: await sha256Hex(`secret draft ${DRAFT_CANARY}`), exp: env.now.t + 1e6 });
   assertEquals(code(await go({ confirmation_token: otherKey })), "CONFIRMATION_INVALID"); // signed with a different key
   env.now.t += 11 * 60 * 1000;
   assertEquals(code(await go({})), "CONFIRMATION_EXPIRED");
@@ -396,11 +405,15 @@ Deno.test("publish_draft: every confirmation failure mode is refused and writes 
 // ---------------------------------------------------------------- errors, logs, secrets
 Deno.test("backend errors become INTERNAL with a fixed message: no backend text, no stack, no content in response or logs", async () => {
   const env = await setup();
+  // (a) every store call fails with a StoreError carrying a canary; called past authentication with a fixed principal
   env.store.failWith = new StoreError("BACKEND", BACKEND_CANARY);
-  // authenticate first (token lookup must work), then fail the data calls
-  const ok = new FakeStore();
-  void ok;
+  const failed = await callTool(env.deps, { userId: U.owner, tokenId: "t", scopes: ["read"] }, "get_book_metadata", { book_id: ID.bk1 });
+  assertEquals((failed.structuredContent.error as { code: string }).code, "INTERNAL");
+  assert(!JSON.stringify(failed).includes(BACKEND_CANARY));
+  // ...and the same outage during token lookup is a 503, never a 401 or 200
+  assertEquals((await rpc(env, env.tok.owner, "tools/list")).status, 503);
   env.store.failWith = null;
+  // (b) an arbitrary exception with a path, a stack-like text and a token in its message
   const origGet = env.store.getMemberBook.bind(env.store);
   env.store.getMemberBook = () => { throw new Error(`${BACKEND_CANARY} at /secret/path.ts:12 ${env.tok.owner}`); };
   const r = await tool(env, env.tok.owner, "get_book_metadata", { book_id: ID.bk1 });
@@ -421,7 +434,7 @@ Deno.test("canary: tokens, draft text, written Markdown and other users' content
   const logs = env.logs.join("\n");
   for (const secret of [...Object.values(env.tok), "dbk_AAAAAAAA_" + "B".repeat(43), "WRITTEN_MARKDOWN_CANARY", DRAFT_CANARY, "SUMMARY_CANARY", PRIVATE_CANARY]) assert(!logs.includes(secret), `log leaked ${secret.slice(0, 12)}`);
   assert(!unauth.text.includes(env.tok.owner));
-  const allowed = new Set(["t", "event", "tokenId", "userId", "tool", "bookId", "stepId", "outcome", "revisionBefore", "revisionAfter", "contentSha256", "ms"]);
+  const allowed = new Set(["t", "event", "requestId", "tokenId", "userId", "tool", "bookId", "stepId", "outcome", "revisionBefore", "revisionAfter", "contentSha256", "ms"]);
   for (const l of env.logs) { const o = JSON.parse(l); for (const k of Object.keys(o)) assert(allowed.has(k), `unexpected audit key ${k}`); }
   const w = env.logs.map((l) => JSON.parse(l)).find((o) => o.tool === "update_draft");
   assertEquals(w.contentSha256, await sha256Hex(`WRITTEN_MARKDOWN_CANARY ${DRAFT_CANARY}`)); assertEquals(w.revisionBefore, rev); assertEquals(w.userId, U.owner);
@@ -463,7 +476,7 @@ Deno.test("store: unique-violation detection accepts the SQLSTATE or the wording
       const b: any = { select: () => b, eq: () => b, order: () => b, limit: () => Promise.resolve({ data: [{ position: 1 }], error: null }), insert: () => { inserts++; return b; }, single: () => Promise.resolve(inserts === 1 && firstError ? { data: null, error: firstError } : { data: row, error: null }) };
       void table; return b;
     };
-    return { store: createInsforgeStore({ from: builder }), inserts: () => inserts };
+    return { store: createInsforgeStore({ from: builder }, { sleep: async () => {} }), inserts: () => inserts };
   };
   for (const err of [{ code: "23505" }, { message: "duplicate key value violates unique constraint" }, { details: "Key (phase_id, position)=(p, 2) already exists." }]) {
     const m = mk(err); await m.store.insertStep("p", "t", {}, "u"); assertEquals(m.inserts(), 2, JSON.stringify(err));
@@ -478,4 +491,207 @@ Deno.test("rate limiter: exceeding the bucket map size keeps throttled callers t
   assert(rl.take("victim", "write")); assert(!rl.take("victim", "write")); // victim is now throttled
   for (let i = 0; i < 6000; i++) rl.take(`t${i}`, "read");
   assert(!rl.take("victim", "write"), "a flood of other tokens must not reset the victim's bucket");
+});
+
+// ---------------------------------------------------------------- adversarial tests added after the 2026-10-20 review
+Deno.test("adversarial: update_draft refuses ambiguous legacy steps (LEGACY_STEP) and changes nothing; a failed attempt can be retried after migration", async () => {
+  const env = await setup();
+  const LEG_PUB = "00000000-0000-4000-8000-0000000000e1";
+  env.store.addStep(LEG_PUB, ID.ph1, "Legacy published", 4, { status: "Published", markdown: "OLD_PUBLISHED_TEXT", slug: "lp" });
+  for (const id of [ID.s3, LEG_PUB]) {
+    const before = JSON.stringify(env.store.step(id));
+    const r = await tool(env, env.tok.editor, "update_draft", { step_id: id, expected_revision: env.store.step(id).updated_at, markdown: `NEW_DRAFT ${DRAFT_CANARY}`, change_summary: "c" });
+    assertEquals(code(r), "LEGACY_STEP");
+    assert(!r.text.includes(DRAFT_CANARY) && !r.text.includes("OLD_PUBLISHED_TEXT"));
+    assertEquals(JSON.stringify(env.store.step(id)), before, "nothing may change");
+  }
+  assertEquals(env.store.casCalls, 0);
+  // after the 02b-style migration (publishedMarkdown frozen) the same edit succeeds and stays a draft
+  const s = env.store.step(LEG_PUB);
+  s.content = { ...s.content, publishedMarkdown: "OLD_PUBLISHED_TEXT" };
+  const ok2 = await tool(env, env.tok.editor, "update_draft", { step_id: LEG_PUB, expected_revision: s.updated_at, markdown: `NEW_DRAFT ${DRAFT_CANARY}`, change_summary: "c" });
+  assertEquals(ok2.isError, undefined, ok2.text);
+  assertEquals((await tool(env, env.tok.viewer, "get_step_content", { step_id: LEG_PUB })).data.markdown, "OLD_PUBLISHED_TEXT");
+  // classification
+  assertEquals(isAmbiguousLegacyStep({ status: "Draft", markdown: "a" }, "PUBLISHED"), false);
+  assertEquals(isAmbiguousLegacyStep({ status: "Published", markdown: "a", publishedMarkdown: "p" }, "PUBLISHED"), false);
+  assertEquals(isAmbiguousLegacyStep({ markdown: "a" }, "DRAFT"), false);
+  assertEquals(isAmbiguousLegacyStep({ markdown: "a" }, "PUBLISHED"), true);
+  assertEquals(isAmbiguousLegacyStep({ status: "Published", markdown: 5 }, "DRAFT"), true);
+});
+
+Deno.test("adversarial: LEGACY reader rule parity between handler.ts (legacyReaderText) and the website's reader-visibility.ts over every content shape; the STRICT rule never falls back to markdown", () => {
+  const pms = [undefined, "P", "", null, 7], sts = [undefined, "Published", "Draft", "Archived", "", null, 42], mds = [undefined, "M", "", null, 3];
+  let n = 0;
+  for (const pm of pms) for (const st of sts) for (const md of mds) for (const bs of ["PUBLISHED", "DRAFT", "ARCHIVED"]) {
+    const c: Record<string, unknown> = {};
+    if (pm !== undefined) c.publishedMarkdown = pm;
+    if (st !== undefined) c.status = st;
+    if (md !== undefined) c.markdown = md;
+    const mine = legacyReaderText(c, bs);
+    assertEquals(isReaderVisible(c as never, bs), mine !== null, JSON.stringify([c, bs]));
+    assertEquals(readerMarkdown(c as never, bs), mine ?? "", JSON.stringify([c, bs]));
+    // strict: only a publishedMarkdown string, never the draft; and it is always a subset of the legacy rule
+    assertEquals(readerText(c, bs), typeof c.publishedMarkdown === "string" ? c.publishedMarkdown : null, JSON.stringify([c, bs]));
+    if (readerText(c, bs) !== null) assertEquals(readerText(c, bs), mine);
+    n++;
+  }
+  assertEquals(n, 525);
+});
+
+Deno.test("adversarial: append retries use jittered exponential backoff and end in BUSY, never INTERNAL", async () => {
+  const mk = (conflicts: number) => {
+    let inserts = 0;
+    const sleeps: number[] = [];
+    const row = { id: "x", phase_id: "p", title: "t", position: 2, content: {}, updated_at: "2026-10-18T10:00:00.000001+00:00" };
+    // deno-lint-ignore no-explicit-any
+    const builder = (): any => {
+      // deno-lint-ignore no-explicit-any
+      const b: any = { select: () => b, eq: () => b, order: () => b, limit: () => Promise.resolve({ data: [{ position: 1 }], error: null }), insert: () => { inserts++; return b; }, single: () => Promise.resolve(inserts <= conflicts ? { data: null, error: { code: "23505" } } : { data: row, error: null }) };
+      return b;
+    };
+    const store = createInsforgeStore({ from: builder }, { sleep: async (ms) => { sleeps.push(ms); }, random: () => 0.999999 });
+    return { store, inserts: () => inserts, sleeps };
+  };
+  const five = mk(5);
+  await five.store.insertStep("p", "t", {}, "u");
+  assertEquals(five.inserts(), 6);
+  assertEquals(five.sleeps, [24, 49, 99, 199, 399]); // random() * min(cap, 25 * 2^i), floored
+  const forever = mk(1000);
+  let thrown: unknown;
+  try { await forever.store.insertStep("p", "t", {}, "u"); } catch (e) { thrown = e; }
+  assert(thrown instanceof StoreError && thrown.code === "BUSY");
+  assertEquals(forever.inserts(), APPEND_RETRY_DEFAULTS.attempts);
+  assertEquals(forever.sleeps, [24, 49, 99, 199, 399, 799, 999]); // capped at 1 s, ~2.6 s worst case in total
+  // through the tool layer BUSY is its own retryable code with a fixed message
+  const env = await setup();
+  env.store.insertStep = () => Promise.reject(new StoreError("BUSY"));
+  assertEquals(code(await tool(env, env.tok.editor, "create_draft", { phase_id: ID.ph1, title: "Busy", markdown: "m" })), "BUSY");
+});
+
+Deno.test("adversarial: publishing is owner-only and a confirmation works only with the token that previewed it", async () => {
+  const env = await setup();
+  assertEquals(code(await tool(env, env.tok.editor, "publish_draft", { step_id: ID.s2 })), "FORBIDDEN_ROLE");
+  const pv = await preview(env, "owner");
+  const second = await mkToken(env.store, U.owner, { scopes: ["read", "draft", "publish"] });
+  const confirm = { step_id: ID.s2, confirm: true, confirmation_token: pv.confirmation_token, confirm_title: "Draft only step" };
+  const snap = env.store.snapshot();
+  assertEquals(code(await tool(env, second, "publish_draft", confirm)), "CONFIRMATION_INVALID");
+  assertEquals(env.store.snapshot(), snap);
+  assertEquals((await tool(env, env.tok.owner, "publish_draft", confirm)).isError, undefined);
+});
+
+Deno.test("adversarial: viewers learn nothing about phases that only hold drafts", async () => {
+  const env = await setup();
+  env.store.addPhase("00000000-0000-4000-8000-0000000000c9", ID.bk1, "SECRET_PHASE_TITLE", 2);
+  env.store.addStep("00000000-0000-4000-8000-0000000000e2", "00000000-0000-4000-8000-0000000000c9", "Hidden", 1, { status: "Draft", markdown: "x" });
+  for (const [name, args] of [["get_book_structure", { book_id: ID.bk1 }], ["get_book_metadata", { book_id: ID.bk1 }]] as const) {
+    assert(!(await tool(env, env.tok.viewer, name, args)).text.includes("SECRET_PHASE_TITLE"), name);
+  }
+  assertEquals((await tool(env, env.tok.viewer, "get_book_metadata", { book_id: ID.bk1 })).data.phase_count, 1);
+  assertEquals((await tool(env, env.tok.owner, "get_book_metadata", { book_id: ID.bk1 })).data.phase_count, 2);
+  assert((await tool(env, env.tok.reviewer, "get_book_structure", { book_id: ID.bk1 })).text.includes("SECRET_PHASE_TITLE"));
+});
+
+Deno.test("search_content says truncated when the scan budget runs out; audit lines never carry invented tool names", async () => {
+  const env = await setup();
+  for (let i = 0; i < 1005; i++) env.store.addStep(`bulk-${i}`, ID.ph1, `Bulk ${i}`, 10 + i, { status: "Draft", markdown: "nothing here" });
+  const r = await tool(env, env.tok.owner, "search_content", { query: "zzz-no-match" });
+  assertEquals([r.data.truncated, r.data.results.length], [true, 0]);
+  await rpc(env, env.tok.owner, "tools/call", { name: "CANARY_TOOL_NAME_x", arguments: {} });
+  assert(!env.logs.join("\n").includes("CANARY_TOOL_NAME"));
+  assert(env.logs.some((l) => l.includes('"tool":"unknown"')));
+});
+
+// ---------------------------------------------------------------- strict reader rule, request ids, durable limits and audit (2026-10-20)
+Deno.test("strict reader rule: 'Published' without publishedMarkdown, legacy and draft-only steps never reach a viewer through any read tool", async () => {
+  const env = await setup();
+  const PUB_NO_PM = "00000000-0000-4000-8000-0000000000e3";
+  env.store.addStep(PUB_NO_PM, ID.ph1, "Marked published", 5, { status: "Published", markdown: `MARKED_PUBLISHED_DRAFT ${DRAFT_CANARY}`, slug: "mp" });
+  assertEquals(code(await tool(env, env.tok.viewer, "get_step_content", { step_id: PUB_NO_PM })), "NOT_FOUND");
+  assertEquals(code(await tool(env, env.tok.viewer, "get_publication_status", { step_id: PUB_NO_PM })), "NOT_FOUND");
+  for (const [name, args] of [["get_book_structure", { book_id: ID.bk1 }], ["get_book_metadata", { book_id: ID.bk1 }], ["search_content", { query: "MARKED_PUBLISHED" }], ["search_content", { query: "legacy" }], ["search_books", {}]] as const) {
+    const r = await tool(env, env.tok.viewer, name, args);
+    assert(!r.text.includes("MARKED_PUBLISHED_DRAFT") && !r.text.includes(DRAFT_CANARY) && !r.text.includes("legacy text") && !r.text.includes("Marked published"), name);
+  }
+  assertEquals((await tool(env, env.tok.viewer, "get_book_metadata", { book_id: ID.bk1 })).data.step_count, 1); // only the properly published step
+  // draft roles still see and edit it
+  assertEquals((await tool(env, env.tok.editor, "get_step_content", { step_id: PUB_NO_PM })).data.markdown, `MARKED_PUBLISHED_DRAFT ${DRAFT_CANARY}`);
+});
+
+Deno.test("publish confirmation is bound to the operation: a validly signed token for another op is refused", async () => {
+  const env = await setup();
+  const ownerTokenId = [...env.store.tokenHashes.values()].find((t) => t.user_id === U.owner)!.id;
+  const base = { sub: U.owner, tid: ownerTokenId, step: ID.s2, rev: env.store.step(ID.s2).updated_at, h: await sha256Hex(`secret draft ${DRAFT_CANARY}`), exp: env.now.t + 1e6 };
+  const wrongOp = await makeConfirmation(env.key, { ...base, op: "delete_step" } as never);
+  const snap = env.store.snapshot();
+  assertEquals(code(await tool(env, env.tok.owner, "publish_draft", { step_id: ID.s2, confirm: true, confirmation_token: wrongOp, confirm_title: "Draft only step" })), "CONFIRMATION_INVALID");
+  assertEquals(env.store.snapshot(), snap);
+  // the same payload with the right op works, proving the only difference was the operation
+  const rightOp = await makeConfirmation(env.key, { ...base, op: "publish_draft" });
+  assertEquals((await tool(env, env.tok.owner, "publish_draft", { step_id: ID.s2, confirm: true, confirmation_token: rightOp, confirm_title: "Draft only step" })).isError, undefined);
+});
+
+Deno.test("every response carries a fresh x-request-id that also appears in that request's audit lines", async () => {
+  const env = await setup();
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  const a = await env.handler(req(env.tok.owner, { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "search_books", arguments: {} } }));
+  const b = await env.handler(req(null, { jsonrpc: "2.0", id: 2, method: "tools/list" }));
+  const c = await env.handler(req(env.tok.owner, {}, {}, "GET"));
+  const ids = [a, b, c].map((r) => r.headers.get("x-request-id") ?? "");
+  for (const id of ids) assert(UUID.test(id), id);
+  assertEquals(new Set(ids).size, 3);
+  assertEquals([a.status, b.status, c.status], [200, 401, 405]);
+  assert(env.logs.some((l) => l.includes(`"requestId":"${ids[0]}"`) && l.includes('"tool":"search_books"')));
+  assert(env.logs.some((l) => l.includes(`"requestId":"${ids[1]}"`) && l.includes('"UNAUTHENTICATED"')));
+});
+
+Deno.test("durable limits: shared per-token buckets are enforced, writes fail closed and reads fail open when the limit store is down", async () => {
+  const env = await setup({ write: true, publish: true });
+  const calls: string[] = [];
+  let mode: "count" | "down" = "count";
+  const hits = new Map<string, number>();
+  env.store.rateTake = async (tokenId, bucket, limit) => {
+    calls.push(bucket);
+    if (mode === "down") throw new StoreError("BACKEND");
+    const k = `${tokenId}:${bucket}`;
+    hits.set(k, (hits.get(k) ?? 0) + 1);
+    return hits.get(k)! <= limit;
+  };
+  // flag OFF: never consulted
+  await tool(env, env.tok.owner, "search_books");
+  assertEquals(calls.length, 0);
+  env.deps.durableLimits = true;
+  for (let i = 0; i < DURABLE_LIMITS.read; i++) assertEquals((await tool(env, env.tok.owner, "search_books")).isError, undefined);
+  assertEquals(code(await tool(env, env.tok.owner, "search_books")), "RATE_LIMITED");
+  // publishing has its own bucket
+  await tool(env, env.tok.owner, "publish_draft", { step_id: ID.s2 });
+  assertEquals(calls.at(-1), "publish");
+  // limit store down: reads still work, writes and publishing refuse without touching data
+  mode = "down";
+  const snap = env.store.snapshot();
+  assertEquals((await tool(env, env.tok.editor, "get_book_metadata", { book_id: ID.bk1 })).isError, undefined);
+  assertEquals(code(await tool(env, env.tok.editor, "create_phase", { book_id: ID.bk1, title: "When store is down" })), "BUSY");
+  assertEquals(code(await tool(env, env.tok.owner, "publish_draft", { step_id: ID.s2 })), "BUSY");
+  assertEquals(env.store.snapshot(), snap);
+  assert(env.logs.some((l) => l.includes('"event":"rate_store_error"')));
+});
+
+Deno.test("durable audit: every write/publish attempt (allowed or refused) is recorded with ids only; reads are not; a failing audit store never changes the result", async () => {
+  const env = await setup({ write: true, publish: true });
+  const rows: Record<string, unknown>[] = [];
+  let failing = false;
+  env.store.recordAudit = async (row) => { if (failing) throw new Error("audit down"); rows.push(row); };
+  env.deps.durableAudit = true;
+  await tool(env, env.tok.owner, "search_books");
+  const created = await tool(env, env.tok.editor, "create_draft", { phase_id: ID.ph1, title: "Audited", markdown: `AUDIT_BODY ${DRAFT_CANARY}` });
+  await tool(env, env.tok.viewer, "create_phase", { book_id: ID.bk1, title: "refused" });
+  assertEquals(rows.map((r) => [r.tool, r.outcome]), [["create_draft", "ok"], ["create_phase", "FORBIDDEN_ROLE"]]);
+  assertEquals(rows[0].step_id, created.data.step.id);
+  assertEquals(rows[0].content_sha256, await sha256Hex(`AUDIT_BODY ${DRAFT_CANARY}`));
+  assert(!JSON.stringify(rows).includes(DRAFT_CANARY) && !JSON.stringify(rows).includes("Audited"), "no content or titles in audit rows");
+  failing = true;
+  const r = await tool(env, env.tok.editor, "create_phase", { book_id: ID.bk1, title: "Still works" });
+  assertEquals(r.isError, undefined);
+  assert(env.logs.some((l) => l.includes('"event":"audit_store_error"')));
 });

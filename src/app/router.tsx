@@ -20,7 +20,7 @@ import { ProgressPage } from "@/routes/progress/ProgressPage";
 import { ProfilePage } from "@/routes/profile/ProfilePage";
 import { AuthorsPage } from "@/routes/authors/AuthorsPage";
 import { LandingPage } from "@/routes/landing/LandingPage";
-import { useBook } from "@/hooks/useBooks";
+import { useReaderBook } from "@/hooks/useBooks";
 import { Loader2 } from "lucide-react";
 import { SearchProvider } from "@/providers/SearchProvider";
 import { useState, useEffect } from "react";
@@ -178,9 +178,9 @@ function ReaderRouteComponent() {
   const { bookId } = useParams({ from: readerRoute.id });
   const navigate = useNavigate();
   const { isAuthenticated, user } = useAuth();
-  const { data: dbBook } = useBook(bookId);
+  const { data: tree } = useReaderBook(bookId);
 
-  const canEdit = isAuthenticated && user && dbBook && dbBook.created_by === user.id;
+  const canEdit = isAuthenticated && user && tree && tree.book.created_by === user.id;
 
   return (
     <BookReaderPage

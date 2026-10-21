@@ -181,7 +181,7 @@ index 162179e..c532f3f 100644
 +                              >
 +                                <Icon className="h-3.5 w-3.5" />
 +                                <span className="flex-1">{visibilityLabel(level)}</span>
-+                                {current && <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />}
++                                {current && <Check className="h-3 w-3 text-success" />}
 +                              </button>
 +                            );
 +                          })}

@@ -7,7 +7,7 @@
 //  - tools receive only the Principal derived from the token. No tool accepts a user id.
 //  - the service credential bypasses RLS [A], so authorization is enforced HERE before every read and write: the user must
 //    be a member of the (not soft-deleted) book; draft text only for OWNER/EDITOR/REVIEWER; writes only for OWNER/EDITOR on
-//    non-archived books; write tools are off unless explicitly enabled.
+//    non-archived books; publishing only for OWNER; write tools are off unless explicitly enabled.
 //  - tools return structured error codes with fixed messages. Backend errors, stack traces, tokens and Markdown never go
 //    into error messages or logs; the audit log has an allowlisted shape.
 import { Server } from "npm:@modelcontextprotocol/sdk@1.32.1/server/index.js";
@@ -37,7 +37,7 @@ export type StepContent = Record<string, unknown>;
 export type StepRow = { id: string; phase_id: string; title: string; position: number; content: StepContent; updated_at: string };
 export type TokenRow = { id: string; user_id: string; scopes: string[]; expires_at: string; revoked_at: string | null; last_used_at: string | null };
 
-export type StoreErrorCode = "BACKEND" | "CONFLICT";
+export type StoreErrorCode = "BACKEND" | "CONFLICT" | "BUSY"; // BUSY: append retries exhausted (concurrent creates), safe to retry
 export class StoreError extends Error {
   constructor(public code: StoreErrorCode, message = "store error") {
     super(message);
@@ -59,7 +59,13 @@ export interface Store {
   insertStep(phaseId: string, title: string, content: StepContent, createdBy: string): Promise<StepRow>; // appends
   // Compare-and-set on updated_at. Resolves null when the row changed (or does not exist): nothing was written.
   updateStepCas(stepId: string, expectedUpdatedAt: string, patch: { title?: string; content?: StepContent }): Promise<StepRow | null>;
+  // Optional, shared across isolates (sql/002_mcp_ops.sql). Fixed window: true = allowed, false = over the limit.
+  rateTake?(tokenId: string, bucket: RateBucket, limit: number, windowSeconds: number): Promise<boolean>;
+  // Optional durable audit trail of write/publish calls (sql/002_mcp_ops.sql). Same allowlisted fields as the log line.
+  recordAudit?(row: AuditRow): Promise<void>;
 }
+export type RateBucket = "read" | "write" | "publish";
+export type AuditRow = { request_id: string; token_id: string; user_id: string; tool: string; book_id: string | null; step_id: string | null; outcome: string; revision_before: string | null; revision_after: string | null; content_sha256: string | null };
 
 export type Deps = {
   store: Store;
@@ -69,6 +75,8 @@ export type Deps = {
   publishToolEnabled: boolean;
   audit: (line: string) => void;
   limiter: RateLimiter;
+  durableLimits?: boolean; // DEVBOOK_MCP_DURABLE_LIMITS=true: also enforce the shared per-token limits of store.rateTake
+  durableAudit?: boolean; // DEVBOOK_MCP_DURABLE_AUDIT=true: also store write/publish calls via store.recordAudit
 };
 
 // ------------------------------------------------------------------------------------------------ constants
@@ -80,6 +88,9 @@ const ALLOWED_ORIGINS: string[] = []; // server-to-server clients send no Origin
 const SCOPES: Scope[] = ["read", "draft", "publish"];
 const DRAFT_ROLES: Role[] = ["OWNER", "EDITOR", "REVIEWER"]; // may read unpublished text (decision D-a)
 const WRITE_ROLES: Role[] = ["OWNER", "EDITOR"];
+const PUBLISH_ROLES: Role[] = ["OWNER"]; // decision 2026-10-20: MCP publishing is owner-only (editors can still publish on the website)
+const STEP_PAGE = 1000; // page size for listSteps, below common API max-rows caps
+export const DURABLE_LIMITS: Record<RateBucket, number> = { read: 120, write: 30, publish: 10 }; // per token per minute, all isolates
 const BASE_HEADERS = { "content-type": "application/json", "cache-control": "no-store", "x-content-type-options": "nosniff" };
 
 // ------------------------------------------------------------------------------------------------ small utilities
@@ -116,8 +127,17 @@ export class RateLimiter {
   }
 }
 
-// ------------------------------------------------------------------------------------------------ reader rule (mirror of reader_markdown in 02_reader_objects.sql)
-export function readerText(content: StepContent, bookStatus: string): string | null {
+// ------------------------------------------------------------------------------------------------ reader rules
+// STRICT rule (mirror of reader_markdown in final/07_strict_reader_rule.sql): readers only ever get an explicit
+// publishedMarkdown string. There is no fallback to `markdown`, so unpublished text cannot become reader-visible.
+export function readerText(content: StepContent, _bookStatus: string): string | null {
+  return typeof content.publishedMarkdown === "string" ? content.publishedMarkdown : null;
+}
+// LEGACY rule (mirror of reader_markdown in 02_reader_objects.sql, i.e. a database where 07 is not applied yet): also
+// serves the CURRENT markdown of a step with status "Published", or with no status in a PUBLISHED book. Used only to decide
+// what a database without 07 may be showing, so update_draft refuses ambiguous legacy steps (isAmbiguousLegacyStep) and metadata edits are treated as
+// live (update_step_metadata). It is a superset of the strict rule.
+export function legacyReaderText(content: StepContent, bookStatus: string): string | null {
   if (typeof content.publishedMarkdown === "string") return content.publishedMarkdown;
   if (content.status === "Published") return typeof content.markdown === "string" ? content.markdown : "";
   const missing = content.status === undefined || content.status === null || content.status === "";
@@ -166,15 +186,15 @@ const TOOLS: ToolDef[] = [
   { name: "get_publication_status", scope: "read", write: false, title: "Get publication status", description: "Publication state of a book or of one step." },
   { name: "create_phase", scope: "draft", write: true, title: "Create phase", description: "Appends a phase to a book you can edit. Returns the existing phase when the title already exists." },
   { name: "create_draft", scope: "draft", write: true, title: "Create draft step", description: "Appends a DRAFT step (invisible to readers until published) to a phase of a book you can edit." },
-  { name: "update_draft", scope: "draft", write: true, title: "Update draft Markdown", description: "Replaces the draft Markdown of a step. Requires the revision you read; never touches published text, status, slug or visibility." },
-  { name: "update_step_metadata", scope: "draft", write: true, title: "Update step metadata", description: "Changes title, description, difficulty or estimated minutes. Requires the revision you read. The slug never changes." },
-  { name: "publish_draft", scope: "publish", write: true, destructive: true, title: "Publish one step", description: "Two phases. confirm=false returns a preview and a confirmation token; confirm=true with the token and the exact current title publishes THIS step only. Ask the human before confirming." },
+  { name: "update_draft", scope: "draft", write: true, title: "Update draft Markdown", description: "Replaces the draft Markdown of a step. Requires the revision you read; never touches published text, status, slug or visibility. Refused (LEGACY_STEP) for old steps whose published text is not stored separately." },
+  { name: "update_step_metadata", scope: "draft", write: true, title: "Update step metadata", description: "Changes title, description, difficulty or estimated minutes. Requires the revision you read. The slug never changes. Metadata is not drafted: on a step readers can already see, the change is visible immediately, so it also needs the 'publish' scope." },
+  { name: "publish_draft", scope: "publish", write: true, destructive: true, title: "Publish one step", description: "Book OWNER only. Two phases. confirm=false returns a preview and a confirmation token; confirm=true with the token and the exact current title publishes THIS step only. Ask the human before confirming." },
 ];
 
 // ------------------------------------------------------------------------------------------------ results
 export type ErrorCode =
   | "UNAUTHENTICATED" | "FORBIDDEN_SCOPE" | "FORBIDDEN_ROLE" | "NOT_FOUND" | "VALIDATION" | "CONFLICT" | "DUPLICATE"
-  | "BOOK_ARCHIVED" | "RATE_LIMITED" | "CONFIRMATION_REQUIRED" | "CONFIRMATION_INVALID" | "CONFIRMATION_EXPIRED" | "NOT_AVAILABLE" | "INTERNAL";
+  | "BOOK_ARCHIVED" | "RATE_LIMITED" | "CONFIRMATION_REQUIRED" | "CONFIRMATION_INVALID" | "CONFIRMATION_EXPIRED" | "NOT_AVAILABLE" | "BUSY" | "LEGACY_STEP" | "INTERNAL";
 const MESSAGES: Record<ErrorCode, string> = {
   UNAUTHENTICATED: "Authentication required.",
   FORBIDDEN_SCOPE: "This token does not have the scope this tool needs.",
@@ -189,6 +209,8 @@ const MESSAGES: Record<ErrorCode, string> = {
   CONFIRMATION_INVALID: "The confirmation is invalid for this step or content.",
   CONFIRMATION_EXPIRED: "The confirmation expired. Run the preview again.",
   NOT_AVAILABLE: "This action is not available.",
+  BUSY: "Other changes to the same book are in progress. Nothing was changed. Retry in a few seconds.",
+  LEGACY_STEP: "This step has no separately stored published text yet, so a draft edit could not be kept private. Nothing was changed. Ask the book owner to migrate it (legacy-step migration) or to publish it once, then retry.",
   INTERNAL: "Temporary backend problem. Nothing was changed unless a result said so. Try again later.",
 };
 class ToolFail extends Error {
@@ -202,8 +224,8 @@ const fail = (code: ErrorCode, extra: Record<string, unknown> = {}): ToolResult 
 };
 
 // ------------------------------------------------------------------------------------------------ audit log (allowlisted fields only)
-type AuditFields = { tokenId?: string; userId?: string; tool?: string; bookId?: string; stepId?: string; outcome: string; revisionBefore?: string; revisionAfter?: string; contentSha256?: string; ms?: number; event?: string };
-const AUDIT_KEYS: (keyof AuditFields)[] = ["event", "tokenId", "userId", "tool", "bookId", "stepId", "outcome", "revisionBefore", "revisionAfter", "contentSha256", "ms"];
+type AuditFields = { requestId?: string; tokenId?: string; userId?: string; tool?: string; bookId?: string; stepId?: string; outcome: string; revisionBefore?: string; revisionAfter?: string; contentSha256?: string; ms?: number; event?: string };
+const AUDIT_KEYS: (keyof AuditFields)[] = ["event", "requestId", "tokenId", "userId", "tool", "bookId", "stepId", "outcome", "revisionBefore", "revisionAfter", "contentSha256", "ms"];
 function writeAudit(deps: Deps, f: AuditFields) {
   const line: Record<string, unknown> = { t: new Date(deps.now()).toISOString() };
   for (const k of AUDIT_KEYS) if (f[k] !== undefined) line[k] = f[k];
@@ -211,7 +233,7 @@ function writeAudit(deps: Deps, f: AuditFields) {
 }
 
 // ------------------------------------------------------------------------------------------------ authorization helpers
-type Ctx = { deps: Deps; p: Principal; touched: { bookId?: string; stepId?: string; revisionBefore?: string; revisionAfter?: string; contentSha256?: string } };
+type Ctx = { deps: Deps; p: Principal; requestId: string; touched: { bookId?: string; stepId?: string; revisionBefore?: string; revisionAfter?: string; contentSha256?: string } };
 
 async function bookFor(ctx: Ctx, bookId: string): Promise<MemberBook> {
   const mb = await ctx.deps.store.getMemberBook(ctx.p.userId, bookId); // membership AND not soft-deleted
@@ -234,7 +256,19 @@ function requireWrite(mb: MemberBook) {
   if (!WRITE_ROLES.includes(mb.role)) throw new ToolFail("FORBIDDEN_ROLE");
   if (mb.book.publication_status === "ARCHIVED") throw new ToolFail("BOOK_ARCHIVED");
 }
+function requirePublish(mb: MemberBook) {
+  requireWrite(mb);
+  if (!PUBLISH_ROLES.includes(mb.role)) throw new ToolFail("FORBIDDEN_ROLE");
+}
 const canSeeDrafts = (mb: MemberBook) => DRAFT_ROLES.includes(mb.role);
+
+// A legacy step has no separately stored published text (no publishedMarkdown string) although a database WITHOUT 07 shows
+// its current markdown to readers (status "Published", or no status in a PUBLISHED book). A draft edit of such a step cannot
+// be kept private on that database, and freezing it would re-publish old text on a database WITH 07 (where it is hidden).
+// So the MCP refuses to edit it (LEGACY_STEP) and writes nothing; 02b_legacy_step_freeze.sql migrates these steps.
+export function isAmbiguousLegacyStep(content: StepContent, bookStatus: string): boolean {
+  return typeof content.publishedMarkdown !== "string" && legacyReaderText(content, bookStatus) !== null;
+}
 
 const slugify = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "step";
 const slugOf = (c: StepContent) => (typeof c.slug === "string" && c.slug ? c.slug : "");
@@ -250,8 +284,12 @@ function stepSummary(s: StepRow, mb: MemberBook) {
 async function booksSteps(ctx: Ctx, mb: MemberBook) {
   const phases = await ctx.deps.store.listPhases(mb.book.id);
   const steps = phases.length ? await ctx.deps.store.listSteps(phases.map((p) => p.id)) : [];
-  const visible = canSeeDrafts(mb) ? steps : steps.filter((s) => readerText(s.content, mb.book.publication_status) !== null);
-  return { phases, steps: visible };
+  if (canSeeDrafts(mb)) return { phases, steps };
+  // Non-draft roles: only reader-visible steps, and only phases that contain one (like reader_book_tree), so the title of a
+  // phase that holds nothing but drafts is not revealed.
+  const visible = steps.filter((s) => readerText(s.content, mb.book.publication_status) !== null);
+  const withSteps = new Set(visible.map((s) => s.phase_id));
+  return { phases: phases.filter((p) => withSteps.has(p.id)), steps: visible };
 }
 
 function snippet(haystack: string, needle: string): string {
@@ -264,7 +302,7 @@ function snippet(haystack: string, needle: string): string {
 async function hmacKey(key: Uint8Array, usages: KeyUsage[]) {
   return await crypto.subtle.importKey("raw", key as unknown as BufferSource, { name: "HMAC", hash: "SHA-256" }, false, usages);
 }
-type ConfirmPayload = { sub: string; step: string; rev: string; h: string; exp: number };
+type ConfirmPayload = { op: "publish_draft"; sub: string; tid: string; step: string; rev: string; h: string; exp: number };
 export async function makeConfirmation(key: Uint8Array, p: ConfirmPayload): Promise<string> {
   const body = b64url(enc.encode(JSON.stringify(p)));
   const sig = new Uint8Array(await crypto.subtle.sign("HMAC", await hmacKey(key, ["sign"]), enc.encode(body)));
@@ -277,7 +315,7 @@ async function readConfirmation(key: Uint8Array, token: string): Promise<Confirm
     const good = await crypto.subtle.verify("HMAC", await hmacKey(key, ["verify"]), unb64url(sig), enc.encode(body)); // constant-time
     if (!good) return null;
     const p = JSON.parse(new TextDecoder().decode(unb64url(body)));
-    return typeof p?.sub === "string" && typeof p.step === "string" && typeof p.rev === "string" && typeof p.h === "string" && typeof p.exp === "number" ? p : null;
+    return p?.op === "publish_draft" && typeof p.sub === "string" && typeof p.tid === "string" && typeof p.step === "string" && typeof p.rev === "string" && typeof p.h === "string" && typeof p.exp === "number" ? p : null;
   } catch { return null; }
 }
 function lineDiff(before: string, after: string) {
@@ -359,7 +397,7 @@ const handlers: Record<ToolName, Handler> = {
     for (const mb of mbs) {
       const { steps } = await booksSteps(ctx, mb);
       for (const s of steps) {
-        if (++scanned > 1000) break;
+        if (++scanned > 1000) return { results: out, truncated: true }; // scan budget used up: stop, and say so
         const body = canSeeDrafts(mb) ? draftText(s.content) : readerText(s.content, mb.book.publication_status) ?? "";
         const meta = `${s.title} ${slugOf(s.content)} ${typeof s.content.description === "string" ? s.content.description : ""}`;
         if (norm(meta).includes(needle) || norm(body).includes(needle)) out.push({ step_id: s.id, book_id: mb.book.id, title: s.title, snippet: norm(body).includes(needle) ? snippet(body, a.query) : meta.slice(0, 200) });
@@ -412,7 +450,9 @@ const handlers: Record<ToolName, Handler> = {
     requireWrite(mb);
     ctx.touched.revisionBefore = step.updated_at;
     if (step.updated_at !== a.expected_revision) throw new ToolFail("CONFLICT", { current_revision: step.updated_at });
-    const next = await ctx.deps.store.updateStepCas(step.id, a.expected_revision, { content: { ...step.content, markdown: a.markdown } }); // merge: only `markdown` changes
+    if (isAmbiguousLegacyStep(step.content, mb.book.publication_status)) throw new ToolFail("LEGACY_STEP");
+    // merge: only `markdown` changes
+    const next = await ctx.deps.store.updateStepCas(step.id, a.expected_revision, { content: { ...step.content, markdown: a.markdown } });
     if (!next) throw new ToolFail("CONFLICT");
     ctx.touched.revisionAfter = next.updated_at; ctx.touched.contentSha256 = await sha256Hex(a.markdown);
     return { step_id: next.id, revision: next.updated_at, content_hash: ctx.touched.contentSha256, published_text_unchanged: true, note: "Reload any open browser editor tab for this book." };
@@ -420,6 +460,10 @@ const handlers: Record<ToolName, Handler> = {
   async update_step_metadata(ctx, a: z.infer<typeof schemas.update_step_metadata>) {
     const { step, mb } = await stepFor(ctx, a.step_id);
     requireWrite(mb);
+    // Metadata is not drafted (reader_book_tree serves title/description/difficulty/estimatedTime as stored): on a step readers
+    // can already see, this edit is effectively a publish, so it needs the publish scope (decision 2026-10-20).
+    // legacy rule on purpose: it is the superset, so the check also holds on a database where 07 is not applied yet
+    if (legacyReaderText(step.content, mb.book.publication_status) !== null && !ctx.p.scopes.includes("publish")) throw new ToolFail("FORBIDDEN_SCOPE");
     ctx.touched.revisionBefore = step.updated_at;
     if (step.updated_at !== a.expected_revision) throw new ToolFail("CONFLICT", { current_revision: step.updated_at });
     const content: StepContent = { ...step.content };
@@ -435,12 +479,12 @@ const handlers: Record<ToolName, Handler> = {
     const key = ctx.deps.confirmKey;
     if (!key) throw new ToolFail("NOT_AVAILABLE");
     const { step, mb } = await stepFor(ctx, a.step_id);
-    requireWrite(mb);
+    requirePublish(mb);
     const md = draftText(step.content);
     const h = await sha256Hex(md);
     ctx.touched.revisionBefore = step.updated_at;
     if (!a.confirm) {
-      const token = await makeConfirmation(key, { sub: ctx.p.userId, step: step.id, rev: step.updated_at, h, exp: ctx.deps.now() + CONFIRM_TTL_MS });
+      const token = await makeConfirmation(key, { op: "publish_draft", sub: ctx.p.userId, tid: ctx.p.tokenId, step: step.id, rev: step.updated_at, h, exp: ctx.deps.now() + CONFIRM_TTL_MS });
       const prev = typeof step.content.publishedMarkdown === "string" ? step.content.publishedMarkdown : "";
       const fences = (md.match(/^```/gm) ?? []).length;
       return {
@@ -454,7 +498,7 @@ const handlers: Record<ToolName, Handler> = {
     }
     if (!a.confirmation_token || a.confirm_title === undefined) throw new ToolFail("CONFIRMATION_REQUIRED");
     const p = await readConfirmation(key, a.confirmation_token);
-    if (!p || p.sub !== ctx.p.userId || p.step !== step.id) throw new ToolFail("CONFIRMATION_INVALID");
+    if (!p || p.sub !== ctx.p.userId || p.tid !== ctx.p.tokenId || p.step !== step.id) throw new ToolFail("CONFIRMATION_INVALID"); // same user AND same token
     if (p.exp <= ctx.deps.now()) throw new ToolFail("CONFIRMATION_EXPIRED");
     if (p.rev !== step.updated_at || p.h !== h) throw new ToolFail("CONFLICT", { current_revision: step.updated_at });
     if (a.confirm_title !== step.title.trim()) throw new ToolFail("CONFIRMATION_INVALID");
@@ -474,12 +518,15 @@ export function availableTools(p: Principal, deps: Pick<Deps, "writeToolsEnabled
   return TOOLS.filter((t) => p.scopes.includes(t.scope) && (!t.write || deps.writeToolsEnabled) && (t.name !== "publish_draft" || (deps.publishToolEnabled && deps.confirmKey !== null)));
 }
 
-export async function callTool(deps: Deps, p: Principal, name: unknown, rawArgs: unknown): Promise<ToolResult> {
+// Only real tool names reach the audit log; anything the caller invented is logged as "unknown".
+const knownTool = (name: unknown) => (typeof name === "string" && TOOLS.some((t) => t.name === name) ? name : "unknown");
+
+export async function callTool(deps: Deps, p: Principal, name: unknown, rawArgs: unknown, requestId: string = crypto.randomUUID()): Promise<ToolResult> {
   const started = deps.now();
-  const ctx: Ctx = { deps, p, touched: {} };
+  const ctx: Ctx = { deps, p, requestId, touched: {} };
+  const def = typeof name === "string" ? TOOLS.find((t) => t.name === name) : undefined;
   let outcome = "ok";
   try {
-    const def = typeof name === "string" ? TOOLS.find((t) => t.name === name) : undefined;
     if (!def) { outcome = "NOT_FOUND"; return fail("NOT_FOUND"); }
     if (!availableTools(p, deps).some((t) => t.name === def.name)) {
       const code: ErrorCode = p.scopes.includes(def.scope) ? "NOT_AVAILABLE" : "FORBIDDEN_SCOPE"; // scope held but tool switched off, or scope missing
@@ -487,6 +534,17 @@ export async function callTool(deps: Deps, p: Principal, name: unknown, rawArgs:
       return fail(code);
     }
     if (!deps.limiter.take(p.tokenId, def.write ? "write" : "read")) { outcome = "RATE_LIMITED"; return fail("RATE_LIMITED"); }
+    // Shared limit across all isolates (optional, needs sql/002_mcp_ops.sql). If the limit store fails, writes and publishing
+    // fail CLOSED (BUSY, nothing done) and reads fail OPEN (the per-isolate limiter above still applies).
+    if (deps.durableLimits && deps.store.rateTake) {
+      const bucket: RateBucket = def.name === "publish_draft" ? "publish" : def.write ? "write" : "read";
+      let allowed = true;
+      try { allowed = await deps.store.rateTake(p.tokenId, bucket, DURABLE_LIMITS[bucket], 60); } catch {
+        writeAudit(deps, { event: "rate_store_error", requestId, tokenId: p.tokenId, userId: p.userId, tool: def.name, outcome: def.write ? "BUSY" : "allowed" });
+        if (def.write) { outcome = "BUSY"; return fail("BUSY"); }
+      }
+      if (!allowed) { outcome = "RATE_LIMITED"; return fail("RATE_LIMITED"); }
+    }
     const parsed = schemas[def.name].safeParse(rawArgs ?? {});
     if (!parsed.success) {
       outcome = "VALIDATION";
@@ -496,11 +554,20 @@ export async function callTool(deps: Deps, p: Principal, name: unknown, rawArgs:
     return ok(await handlers[def.name](ctx, parsed.data));
   } catch (err) {
     if (err instanceof ToolFail) { outcome = err.code; return fail(err.code, err.extra); }
+    if (err instanceof StoreError && err.code === "BUSY") { outcome = "BUSY"; return fail("BUSY"); } // retryable, nothing written
     outcome = "INTERNAL"; // StoreError, network errors, bugs: class name only, never the message
-    writeAudit(deps, { event: "tool_error", tokenId: p.tokenId, userId: p.userId, tool: typeof name === "string" ? name : undefined, outcome: `INTERNAL:${err instanceof Error ? err.name : "unknown"}` });
+    writeAudit(deps, { event: "tool_error", requestId, tokenId: p.tokenId, userId: p.userId, tool: knownTool(name), outcome: `INTERNAL:${err instanceof Error ? err.name : "unknown"}` });
     return fail("INTERNAL");
   } finally {
-    writeAudit(deps, { tokenId: p.tokenId, userId: p.userId, tool: typeof name === "string" ? name.slice(0, 40) : undefined, bookId: ctx.touched.bookId, stepId: ctx.touched.stepId, outcome, revisionBefore: ctx.touched.revisionBefore, revisionAfter: ctx.touched.revisionAfter, contentSha256: ctx.touched.contentSha256, ms: deps.now() - started });
+    const t = ctx.touched;
+    writeAudit(deps, { requestId, tokenId: p.tokenId, userId: p.userId, tool: knownTool(name), bookId: t.bookId, stepId: t.stepId, outcome, revisionBefore: t.revisionBefore, revisionAfter: t.revisionAfter, contentSha256: t.contentSha256, ms: deps.now() - started });
+    // Durable trail of every write/publish attempt (allowed or refused). A failure here never changes the tool result
+    // (the write may already be committed); it is reported as its own log event so monitoring can alert on it.
+    if (def?.write && deps.durableAudit && deps.store.recordAudit) {
+      try {
+        await deps.store.recordAudit({ request_id: requestId, token_id: p.tokenId, user_id: p.userId, tool: def.name, book_id: t.bookId ?? null, step_id: t.stepId ?? null, outcome, revision_before: t.revisionBefore ?? null, revision_after: t.revisionAfter ?? null, content_sha256: t.contentSha256 ?? null });
+      } catch { writeAudit(deps, { event: "audit_store_error", requestId, tokenId: p.tokenId, tool: def.name, outcome }); }
+    }
   }
 }
 
@@ -542,7 +609,7 @@ async function readLimited(req: Request, max: number): Promise<Uint8Array | null
   return out;
 }
 
-function buildServer(deps: Deps, p: Principal): Server {
+function buildServer(deps: Deps, p: Principal, requestId: string): Server {
   const server = new Server({ name: "devbook-mcp", version: "0.1.0" }, { capabilities: { tools: {} } });
   server.setRequestHandler(ListToolsRequestSchema, () => ({
     tools: availableTools(p, deps).map((t) => {
@@ -551,66 +618,94 @@ function buildServer(deps: Deps, p: Principal): Server {
       return { name: t.name, title: t.title, description: t.description, inputSchema: schema, annotations: { readOnlyHint: !t.write, destructiveHint: t.destructive === true, idempotentHint: !t.write, openWorldHint: false } };
     }),
   }));
-  server.setRequestHandler(CallToolRequestSchema, (req: { params: { name: string; arguments?: unknown } }) => callTool(deps, p, req.params.name, req.params.arguments));
+  server.setRequestHandler(CallToolRequestSchema, (req: { params: { name: string; arguments?: unknown } }) => callTool(deps, p, req.params.name, req.params.arguments, requestId));
   return server;
+}
+
+// Every response carries x-request-id (a fresh random UUID, never derived from the request) so a user report can be matched
+// with the audit lines of that request.
+function withRequestId(res: Response, requestId: string): Response {
+  const headers = new Headers(res.headers);
+  headers.set("x-request-id", requestId);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
 }
 
 export function createHandler(getDeps: () => Deps | Promise<Deps>): (req: Request) => Promise<Response> {
   return async (req) => {
-    try {
-      if (req.method !== "POST") return jsonRpcError(405, -32000, "Method not allowed. Use POST.", { allow: "POST" });
-      const origin = req.headers.get("origin");
-      if (origin !== null && !ALLOWED_ORIGINS.includes(origin)) return jsonRpcError(403, -32000, "Origin not allowed.");
-
-      let deps: Deps;
-      try { deps = await getDeps(); } catch { return jsonRpcError(503, -32000, "Service is not configured.", { "retry-after": "60" }); }
-
-      let principal: Principal | null;
-      try { principal = await authenticate(deps, req.headers.get("authorization")); } catch {
-        return jsonRpcError(503, -32000, "Authentication backend unavailable.", { "retry-after": "10" });
-      }
-      if (!principal) {
-        writeAudit(deps, { event: "auth", outcome: "UNAUTHENTICATED" });
-        return jsonRpcError(401, -32001, "Unauthorized.", { "www-authenticate": 'Bearer realm="devbook-mcp"' });
-      }
-
-      if (!(req.headers.get("content-type") ?? "").toLowerCase().startsWith("application/json")) return jsonRpcError(415, -32000, "Content-Type must be application/json.");
-      if (Number(req.headers.get("content-length") ?? "0") > MAX_BODY_BYTES) return jsonRpcError(413, -32000, "Request body too large.");
-      const bytes = await readLimited(req, MAX_BODY_BYTES);
-      if (bytes === null) return jsonRpcError(413, -32000, "Request body too large.");
-      let parsedBody: unknown;
-      try { parsedBody = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)); } catch { return jsonRpcError(400, -32700, "Parse error: body is not valid UTF-8 JSON."); }
-
-      const server = buildServer(deps, principal);
-      const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
-      await server.connect(transport);
-      const response = await transport.handleRequest(req, { parsedBody });
-      queueMicrotask(() => { void server.close().catch(() => {}); });
-      return response;
-    } catch (err) {
-      console.error("[devbook-mcp] unhandled", err instanceof Error ? err.name : "unknown"); // class name only
-      return jsonRpcError(500, -32603, "Internal error.");
-    }
+    const requestId = crypto.randomUUID();
+    return withRequestId(await handleRequest(getDeps, req, requestId), requestId);
   };
+}
+
+async function handleRequest(getDeps: () => Deps | Promise<Deps>, req: Request, requestId: string): Promise<Response> {
+  try {
+    if (req.method !== "POST") return jsonRpcError(405, -32000, "Method not allowed. Use POST.", { allow: "POST" });
+    const origin = req.headers.get("origin");
+    if (origin !== null && !ALLOWED_ORIGINS.includes(origin)) return jsonRpcError(403, -32000, "Origin not allowed.");
+
+    let deps: Deps;
+    try { deps = await getDeps(); } catch { return jsonRpcError(503, -32000, "Service is not configured.", { "retry-after": "60" }); }
+
+    let principal: Principal | null;
+    try { principal = await authenticate(deps, req.headers.get("authorization")); } catch {
+      writeAudit(deps, { event: "auth", requestId, outcome: "AUTH_BACKEND_UNAVAILABLE" });
+      return jsonRpcError(503, -32000, "Authentication backend unavailable.", { "retry-after": "10" });
+    }
+    if (!principal) {
+      writeAudit(deps, { event: "auth", requestId, outcome: "UNAUTHENTICATED" });
+      return jsonRpcError(401, -32001, "Unauthorized.", { "www-authenticate": 'Bearer realm="devbook-mcp"' });
+    }
+
+    if (!(req.headers.get("content-type") ?? "").toLowerCase().startsWith("application/json")) return jsonRpcError(415, -32000, "Content-Type must be application/json.");
+    if (Number(req.headers.get("content-length") ?? "0") > MAX_BODY_BYTES) return jsonRpcError(413, -32000, "Request body too large.");
+    const bytes = await readLimited(req, MAX_BODY_BYTES);
+    if (bytes === null) return jsonRpcError(413, -32000, "Request body too large.");
+    let parsedBody: unknown;
+    try { parsedBody = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)); } catch { return jsonRpcError(400, -32700, "Parse error: body is not valid UTF-8 JSON."); }
+
+    const server = buildServer(deps, principal, requestId);
+    const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+    await server.connect(transport);
+    const response = await transport.handleRequest(req, { parsedBody });
+    queueMicrotask(() => { void server.close().catch(() => {}); });
+    return response;
+  } catch (err) {
+    console.error("[devbook-mcp] unhandled", err instanceof Error ? err.name : "unknown"); // class name only
+    return jsonRpcError(500, -32603, "Internal error.");
+  }
 }
 
 // ------------------------------------------------------------------------------------------------ InsForge-backed Store [U]: never run against a real backend yet
 // `db` is `createAdminClient(...).database` (a postgrest-js style builder). Flat queries only, so the same code can be
 // exercised against a SQL-backed emulator in tests/pg-db.ts.
 // deno-lint-ignore no-explicit-any
-export type DbLike = { from(table: string): any };
+export type DbLike = { from(table: string): any; rpc?(fn: string, args: Record<string, unknown>): any };
 const BOOK_COLS = "id,title,slug,description,tags,publication_status,access_level,deleted_at";
 const STEP_COLS = "id,phase_id,title,position,content,updated_at";
 function must<T>(r: { data: T; error: unknown }): T {
   if (r.error) throw new StoreError("BACKEND"); // never forward the backend's message
   return r.data;
 }
-export function createInsforgeStore(db: DbLike): Store {
+export type AppendRetryOptions = { attempts?: number; baseMs?: number; capMs?: number; sleep?: (ms: number) => Promise<void>; random?: () => number };
+export const APPEND_RETRY_DEFAULTS = { attempts: 8, baseMs: 25, capMs: 1000 };
+const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+// Appends race on the unique (parent, position) index. Retry with "full jitter" exponential backoff so concurrent creators
+// spread out instead of colliding again: wait random(0, min(cap, base * 2^i)). Worst case ~2.6 s total with the defaults.
+// Exhausted retries become BUSY (retryable, nothing written), never INTERNAL.
+export function createInsforgeStore(db: DbLike, retry: AppendRetryOptions = {}): Store {
+  const attempts = retry.attempts ?? APPEND_RETRY_DEFAULTS.attempts;
+  const baseMs = retry.baseMs ?? APPEND_RETRY_DEFAULTS.baseMs, capMs = retry.capMs ?? APPEND_RETRY_DEFAULTS.capMs;
+  const sleep = retry.sleep ?? realSleep, random = retry.random ?? Math.random;
   const appendRetry = async <T>(attempt: () => Promise<T>): Promise<T> => {
-    for (let i = 0; i < 3; i++) {
-      try { return await attempt(); } catch (e) { if (!(e instanceof StoreError && e.code === "CONFLICT") || i === 2) throw e; }
+    for (let i = 0; i < attempts; i++) {
+      try { return await attempt(); } catch (e) {
+        if (!(e instanceof StoreError && e.code === "CONFLICT")) throw e;
+        if (i === attempts - 1) break;
+        await sleep(Math.floor(random() * Math.min(capMs, baseMs * 2 ** i)));
+      }
     }
-    throw new StoreError("CONFLICT");
+    throw new StoreError("BUSY");
   };
   const nextPosition = async (table: "phases" | "steps", col: "book_id" | "phase_id", id: string): Promise<number> => {
     const rows = must(await db.from(table).select("position").eq(col, id).order("position", { ascending: false }).limit(1)) as { position: number }[];
@@ -644,7 +739,15 @@ export function createInsforgeStore(db: DbLike): Store {
       return book ? { book, role: m.role } : null;
     },
     async listPhases(bookId) { return must(await db.from("phases").select("id,book_id,title,position").eq("book_id", bookId).order("position", { ascending: true })) as PhaseRow[]; },
-    async listSteps(phaseIds) { return must(await db.from("steps").select(STEP_COLS).in("phase_id", phaseIds).order("position", { ascending: true })) as StepRow[]; },
+    async listSteps(phaseIds) {
+      // Paged with a stable order (position, id): the API may cap a single response, and a silent cap would hide steps.
+      const out: StepRow[] = [];
+      for (let from = 0; ; from += STEP_PAGE) {
+        const page = must(await db.from("steps").select(STEP_COLS).in("phase_id", phaseIds).order("position", { ascending: true }).order("id", { ascending: true }).range(from, from + STEP_PAGE - 1)) as StepRow[];
+        out.push(...page);
+        if (page.length < STEP_PAGE) return out;
+      }
+    },
     async getPhase(id) { return must(await db.from("phases").select("id,book_id,title,position").eq("id", id).maybeSingle()) as PhaseRow | null; },
     async getStep(id) { return must(await db.from("steps").select(STEP_COLS).eq("id", id).maybeSingle()) as StepRow | null; },
     insertPhase: (bookId, title, createdBy) => appendRetry(async () => insert("phases", { book_id: bookId, title, position: await nextPosition("phases", "book_id", bookId), created_by: createdBy }, "id,book_id,title,position") as Promise<PhaseRow>),
@@ -653,12 +756,21 @@ export function createInsforgeStore(db: DbLike): Store {
       const rows = must(await db.from("steps").update(patch).eq("id", stepId).eq("updated_at", expected).select(STEP_COLS)) as StepRow[];
       return rows[0] ?? null; // zero rows: somebody changed the step between our read and write
     },
+    async rateTake(tokenId, bucket, limit, windowSeconds) {
+      if (!db.rpc) throw new StoreError("BACKEND");
+      const allowed = must(await db.rpc("mcp_rate_take", { p_token: tokenId, p_bucket: bucket, p_limit: limit, p_window_seconds: windowSeconds }));
+      if (typeof allowed !== "boolean") throw new StoreError("BACKEND");
+      return allowed;
+    },
+    async recordAudit(row) { must(await db.from("mcp_audit_events").insert([row])); },
   };
 }
 
 // ------------------------------------------------------------------------------------------------ production wiring [U]
 // Secrets: DEVBOOK_MCP_API_KEY (service credential, bypasses RLS [A]), DEVBOOK_MCP_CONFIRM_KEY (>= 32 random bytes, base64url).
 // Flags: DEVBOOK_MCP_WRITE_TOOLS=true enables draft tools, DEVBOOK_MCP_PUBLISH_TOOL=true enables publish_draft. Both default OFF.
+// DEVBOOK_MCP_DURABLE_LIMITS=true / DEVBOOK_MCP_DURABLE_AUDIT=true use the shared limit and audit tables of sql/002_mcp_ops.sql
+// (default OFF, so the function keeps working before that migration exists).
 let cached: Deps | null = null;
 export function depsFromEnv(env: { get(name: string): string | undefined } = Deno.env): Deps {
   if (cached) return cached;
@@ -675,6 +787,8 @@ export function depsFromEnv(env: { get(name: string): string | undefined } = Den
     publishToolEnabled: env.get("DEVBOOK_MCP_PUBLISH_TOOL") === "true",
     audit: (line) => console.log(line),
     limiter: new RateLimiter(now),
+    durableLimits: env.get("DEVBOOK_MCP_DURABLE_LIMITS") === "true", // needs sql/002_mcp_ops.sql
+    durableAudit: env.get("DEVBOOK_MCP_DURABLE_AUDIT") === "true", // needs sql/002_mcp_ops.sql
   };
   return cached;
 }

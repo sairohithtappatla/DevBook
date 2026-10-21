@@ -8,6 +8,7 @@ import {
   Database,
   Eye,
   Globe,
+  Link2,
   Lock,
   Pencil,
   Plus,
@@ -18,6 +19,7 @@ import {
   Trash2,
   RefreshCw,
 } from "lucide-react";
+import { visibilityLabel, type VisibilityLabel } from "@/lib/access-level";
 import { CreateBookModal } from "@/components/modals/CreateBookModal";
 import { useBooks, useBookStepCounts, useCreateBook, useDeleteBook } from "@/hooks/useBooks";
 import { useAuth } from "@/hooks/useAuth";
@@ -34,7 +36,7 @@ type BookItem = {
   description: string;
   phases: number;
   steps: number;
-  visibility: "Public" | "Followers" | "Selected" | "Private";
+  visibility: VisibilityLabel;
   updatedDate: string;
   updatedRelative: string;
   status: "Published" | "Draft" | "Archived";
@@ -53,14 +55,7 @@ function mapDBBookToBookItem(dbBook: BookRecord, stepCounts?: Record<string, num
     description: dbBook.description || "Developer guide draft",
     phases: stepCount ? Math.ceil(stepCount / 3) : 0,
     steps: stepCount,
-    visibility:
-      dbBook.access_level === "FOLLOWERS"
-        ? "Followers"
-        : dbBook.access_level === "SELECTED"
-          ? "Selected"
-          : dbBook.access_level === "PRIVATE"
-            ? "Private"
-            : "Public",
+    visibility: visibilityLabel(dbBook.access_level),
     updatedDate: dateValue
       ? new Date(dateValue).toLocaleDateString("en-US", {
           month: "short",
@@ -131,7 +126,7 @@ export function MyBooksPage({
 } = {}) {
   const { data: dbBooks = [], refetch: refetchBooks, isFetching: isFetchingBooks } = useBooks();
   const bookIds = useMemo(() => dbBooks.map((book) => book.id), [dbBooks]);
-  const { data: stepCounts, refetch: refetchCounts, isFetching: isFetchingCounts } = useBookStepCounts(bookIds);
+  const { data: stepCounts, refetch: refetchCounts, isFetching: isFetchingCounts } = useBookStepCounts(bookIds, { includeDrafts: true });
   
   const handleRefresh = async () => {
     await Promise.all([refetchBooks(), refetchCounts()]);
@@ -407,6 +402,13 @@ function getVisibilityBadge(visibility: BookItem["visibility"]) {
           Selected
         </span>
       );
+    case "Unlisted":
+      return (
+        <span className="badge badge-private">
+          <Link2 className="badge-icon" />
+          Unlisted
+        </span>
+      );
     case "Private":
       return (
         <span className="badge badge-private">
@@ -414,6 +416,8 @@ function getVisibilityBadge(visibility: BookItem["visibility"]) {
           Private
         </span>
       );
+    case "Unknown":
+      return <span className="badge badge-private">Unknown</span>;
   }
 }
 

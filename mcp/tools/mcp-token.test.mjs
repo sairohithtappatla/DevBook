@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import { createRequire } from "node:module";
-const run = (...a) => spawnSync(process.execPath, [new URL("./mcp-token.mjs", import.meta.url).pathname, ...a], { encoding: "utf8" });
+import { fileURLToPath } from "node:url";
+const run = (...a) => spawnSync(process.execPath, [fileURLToPath(new URL("./mcp-token.mjs", import.meta.url)), ...a], { encoding: "utf8" }); // fileURLToPath: also correct on Windows
 
 test("stdout carries only the hash; stderr carries the token once; hash matches", () => {
   const r = run("--email", "me@example.com", "--label", "claude code", "--scopes", "read,draft");

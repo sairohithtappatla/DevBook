@@ -13,6 +13,9 @@ export class FakeStore implements Store {
   failWith: Error | null = null; // make every call throw (backend outage / leaky error)
   beforeCas: (() => void) | null = null; // hook to simulate a concurrent editor save between read and write
   casCalls = 0;
+  // optional Store hooks (durable limits / audit); tests assign them when needed
+  rateTake?: Store["rateTake"];
+  recordAudit?: Store["recordAudit"];
 
   private tick() { this.clock++; return `2026-10-18T10:00:00.${String(this.clock).padStart(6, "0")}+00:00`; }
   private check() { if (this.failWith) throw this.failWith; }

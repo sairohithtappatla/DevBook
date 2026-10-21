@@ -10,6 +10,7 @@ set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"; RLS="$(cd "$HERE/.." && pwd)"; MCP="$(cd "$RLS/../../devbook-mcp" && pwd)"; REPO="$(cd "$RLS/../../.." && pwd)"
 : "${PG_MODULE:?set PG_MODULE}"; : "${DENO:?set DENO}"; export PGHOST=127.0.0.1 PGPORT="${PGPORT:-54329}" PGUSER=postgres PG_MODULE
 ROWS=(); fails=0
+native() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi; } # Git Bash on Windows: /d/x -> D:/x for node
 run() { # run <name> <command...>  (output kept in $LOG/<n>.log)
   local name="$1"; shift; local n=$(( ${#ROWS[@]} + 1 )); local log="$LOG/$n.log"
   if "$@" >"$log" 2>&1; then ROWS+=("PASS  $name"); else ROWS+=("FAIL  $name   (see $log)"); fails=$((fails+1)); fi
@@ -22,7 +23,7 @@ run "local PostgreSQL reachable on 127.0.0.1:$PGPORT" node -e 'const pg=require(
 
 # 1. SQL parser check
 if [ -n "${PARSER_DIR:-}" ]; then
-  run "SQL parses (final set, rollbacks, mcp_tokens)" node -e 'const q=require(require("path").join(process.env.PARSER_DIR,"libpg-query"));const fs=require("fs");(async()=>{await q.loadModule();let bad=0;for(const d of ["'"$HERE"'","'"$MCP"'/sql"])for(const f of fs.readdirSync(d).filter(x=>x.endsWith(".sql"))){try{q.parseSync(fs.readFileSync(d+"/"+f,"utf8"))}catch(e){bad++;console.error(f,e.message)}}process.exit(bad?1:0)})()'
+  run "SQL parses (final set, rollbacks, mcp_tokens)" node -e 'const q=require(require("path").join(process.env.PARSER_DIR,"libpg-query"));const fs=require("fs");(async()=>{await q.loadModule();let bad=0;for(const d of ["'"$(native "$HERE")"'","'"$(native "$MCP")"'/sql"])for(const f of fs.readdirSync(d).filter(x=>x.endsWith(".sql"))){try{q.parseSync(fs.readFileSync(d+"/"+f,"utf8"))}catch(e){bad++;console.error(f,e.message)}}process.exitCode=bad?1:0 /* natural exit: avoids a libuv assertion on Windows */})()'
 else skip "SQL parse check" "PARSER_DIR not set"; fi
 
 # 2. SQL behaviour in the sandbox (native PostgreSQL)
@@ -33,6 +34,7 @@ run "baseline loader is current (test-project/make-baseline.mjs --check)" node "
 run "baseline loads on an InsForge-like platform, 01-04 apply, rollbacks restore it (test-project/validate-loader.mjs)" node "$HERE/test-project/validate-loader.mjs"
 run "04 guard also fires without a role switch when a JWT subject exists (final/sandbox/guard-no-role.mjs)" node "$HERE/sandbox/guard-no-role.mjs"
 run "F3: a user cannot create a book owned by someone else (final/sandbox/insert-books.mjs)" node "$HERE/sandbox/insert-books.mjs"
+run "02b legacy-step freeze keeps reader output, makes later edits drafts, rolls back exactly; 06 search_path pin (final/sandbox/legacy-freeze.mjs)" node "$HERE/sandbox/legacy-freeze.mjs"
 run "can_manage_members recursion reproduced and fixed (final/sandbox/recursion.mjs)" env SQL_DIR="$HERE" node "$HERE/sandbox/recursion.mjs"
 run "lifecycle + function privileges, default and restrictive grants (sandbox/lifecycle.mjs)" env SQL_DIR="$HERE" node "$RLS/sandbox/lifecycle.mjs"
 run "soft-deleted books hidden from the reader function (sandbox/softdelete.mjs)" env SQL_DIR="$HERE" EXPECT=patched node "$RLS/sandbox/softdelete.mjs"
@@ -55,7 +57,7 @@ if [ -n "${FE_NODE_MODULES:-}" ] && [ -d "$FE_NODE_MODULES" ]; then
   ln -s "$FE_NODE_MODULES" "$W/node_modules"; (cd "$W" && printf 'node_modules\n' > .gitignore && git init -q . && git add -A >/dev/null 2>&1 && git -c user.email=a@b -c user.name=x commit -qm base >/dev/null)
   FE() { (cd "$W" && "$@"); }
   run "website: base src type-checks" FE node_modules/.bin/tsc -b
-  run "website: apply access-level patch, then stacked reader patch (git apply)" FE bash -c "git apply '$RLS/frontend-access-level.patch' && git apply '$RLS/frontend-reader-integration.after-access-level.patch'"
+  run "website: apply access-level patch, stacked reader patch, editor keep-published patch (applied now, or already in src/)" FE bash -c "git apply '$RLS/frontend-access-level.patch' && git apply '$RLS/frontend-reader-integration.after-access-level.patch' && { git apply --check '$RLS/frontend-editor-keep-published.patch' 2>/dev/null && git apply '$RLS/frontend-editor-keep-published.patch' || git apply --reverse --check '$RLS/frontend-editor-keep-published.patch'; } && grep -q 'publishedMarkdown: s.publishedMarkdown' src/routes/books/BookEditorPage.tsx"
   run "website (combined patches): tsc -b" FE node_modules/.bin/tsc -b
   run "website (combined patches): vite build" FE node_modules/.bin/vite build
   base=$(cd "$W" && git stash -q -u -- src && node_modules/.bin/oxlint src 2>&1 | grep -c '^src.*\(warning\|error\)'; cd "$W" && git stash pop -q)
@@ -65,6 +67,7 @@ if [ -n "${FE_NODE_MODULES:-}" ] && [ -d "$FE_NODE_MODULES" ]; then
   for pair in "reader-integration.test.ts out-a" "reader-page.test.tsx out-b" "softdelete.test.ts out-c"; do set -- $pair
     run "website (combined patches): $1" FE bash -c "node t/build-test.mjs $1 $2 && node t/$2/*.js"; done
   run "website (combined patches): access-level + optimistic rollback (real useUpdateBook)" FE bash -c "node t/build.mjs && node t/out/rollback.test.js"
+  run "website (combined patches): editor autosave keeps publishedMarkdown (editor-save.test.ts)" FE bash -c "node t/build-editor.mjs && node t/out-editor/editor-save.test.js"
 else skip "website checks (tsc, build, lint, reader/soft-delete/rollback tests)" "FE_NODE_MODULES not set"; fi
 
 # 5. safety: scripts refuse non-local databases and the production project

@@ -1,3 +1,4 @@
+import { draftContentPatch } from "@/lib/step-content";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { TopBar } from "@/components/layout/TopBar";
@@ -48,13 +49,26 @@ import {
   Loader2,
   Lock,
   Users,
+  Link2,
+  UserCheck,
+  HelpCircle,
 } from "lucide-react";
+import { SELECTABLE_ACCESS_LEVELS, visibilityLabel, type AccessLevel } from "@/lib/access-level";
+
+const VISIBILITY_ICONS: Record<AccessLevel, typeof Globe> = {
+  PUBLIC: Globe,
+  UNLISTED: Link2,
+  PRIVATE: Lock,
+  FOLLOWERS_ONLY: Users,
+  SELECTED_USERS: UserCheck,
+};
 
 type StepNode = {
   id: string;
   title: string;
   slug: string;
   markdown: string;
+  publishedMarkdown?: string; // what readers see; only the explicit Publish action changes it
   description: string;
   status: "Published" | "Draft" | "Archived";
   estimatedTime: number;
@@ -154,6 +168,7 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
           title: s.title,
           slug: s.slug || s.title.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
           markdown: s.markdown || "",
+          publishedMarkdown: s.publishedMarkdown, // kept separately from the editable draft; never written by autosave
           description: s.description || "",
           status: s.status || "Draft",
           estimatedTime: s.estimatedTime || 10,
@@ -292,16 +307,16 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
           updates: {
             title: activeStepFound.title,
             position: stepPos,
-            content: {
+            // Draft fields only: publishedMarkdown and status are never sent by autosave (only Publish changes them), and
+            // DBService.updateStep merges this into the current server content, so published text is always preserved.
+            content: draftContentPatch({
               slug: activeStepFound.slug,
               markdown: currentMarkdown,
-              publishedMarkdown: (activeStepFound as any).publishedMarkdown,
               description: activeStepFound.description,
-              status: activeStepFound.status === "Published" ? "Published" : "Draft",
               difficulty: activeStepFound.difficulty,
               estimatedTime: activeStepFound.estimatedTime,
               visibility: activeStepFound.visibility,
-            },
+            }),
           },
         });
       }
@@ -767,16 +782,13 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
     return () => document.removeEventListener("mousedown", onDoc);
   }, [menuOpen]);
 
-  const handleBookVisibilityChange = async (vis: "public" | "private" | "followers") => {
+  // Writes ONLY access_level, and only when the book is loaded, no save is in flight and the value really changes.
+  // Optimistic update and rollback stay in useUpdateBook (onMutate / onError).
+  const handleBookVisibilityChange = async (next: AccessLevel) => {
+    if (!dbBook || updateBookMutation.isPending || next === dbBook.access_level) return;
     try {
-      await updateBookMutation.mutateAsync({
-        bookId,
-        updates: {
-          title: dbBook?.title || "",
-          access_level: vis === "public" ? "PUBLIC" : vis === "private" ? "PRIVATE" : "FOLLOWERS",
-        },
-      });
-      showToast(`Book visibility set to ${vis}`, "success");
+      await updateBookMutation.mutateAsync({ bookId, updates: { access_level: next } });
+      showToast(`Book visibility set to ${visibilityLabel(next)}`, "success");
     } catch (err) {
       showToast("Failed to update visibility", "error");
     }
@@ -1057,19 +1069,11 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
                       onClick={() => setMenuOpen(!menuOpen)}
                       className="inline-flex h-[22px] items-center gap-1 rounded-md border border-hairline bg-surface-2 px-2 text-[10px] font-semibold text-text-primary hover:text-foreground hover:border-foreground/20 cursor-pointer transition-colors select-none"
                     >
-                      {dbBook?.access_level === "PUBLIC" ? (
-                        <>
-                          <Globe className="h-3 w-3 text-muted-foreground" /> Public
-                        </>
-                      ) : dbBook?.access_level === "PRIVATE" ? (
-                        <>
-                          <Lock className="h-3 w-3 text-muted-foreground" /> Private
-                        </>
-                      ) : (
-                        <>
-                          <Users className="h-3 w-3 text-muted-foreground" /> Followers
-                        </>
-                      )}
+                      {(() => {
+                        const Icon = VISIBILITY_ICONS[dbBook?.access_level as AccessLevel] ?? HelpCircle;
+                        return <Icon className="h-3 w-3 text-muted-foreground" />;
+                      })()}
+                      {visibilityLabel(dbBook?.access_level)}
                     </button>
                     {menuOpen && (
                       <div className="absolute right-0 top-full z-50 mt-1 w-44 overflow-hidden rounded-lg border border-hairline bg-card shadow-lg">
@@ -1077,34 +1081,32 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
                           Visibility
                         </div>
                         <div className="py-1">
-                          {([
-                            { v: "public", icon: Globe, label: "Public" },
-                            { v: "private", icon: Lock, label: "Private" },
-                            { v: "followers", icon: Users, label: "Followers" },
-                          ] as const).map(({ v, icon: Icon, label }) => (
-                            <button
-                              key={v}
-                              onClick={() => {
-                                handleBookVisibilityChange(v);
-                                setMenuOpen(false);
-                              }}
-                              className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-surface-2 cursor-pointer ${
-                                (dbBook?.access_level === "PUBLIC" && v === "public") ||
-                                (dbBook?.access_level === "PRIVATE" && v === "private") ||
-                                (dbBook?.access_level === "FOLLOWERS" && v === "followers")
-                                  ? "bg-surface-2 font-bold text-foreground"
-                                  : "text-muted-foreground hover:text-foreground"
-                              }`}
-                            >
-                              <Icon className="h-3.5 w-3.5" />
-                              <span className="flex-1">{label}</span>
-                              {((dbBook?.access_level === "PUBLIC" && v === "public") ||
-                                (dbBook?.access_level === "PRIVATE" && v === "private") ||
-                                (dbBook?.access_level === "FOLLOWERS" && v === "followers")) && (
-                                <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                              )}
-                            </button>
-                          ))}
+                          {(dbBook && !SELECTABLE_ACCESS_LEVELS.includes(dbBook.access_level)
+                            ? [dbBook.access_level, ...SELECTABLE_ACCESS_LEVELS]
+                            : SELECTABLE_ACCESS_LEVELS
+                          ).map((level) => {
+                            const Icon = VISIBILITY_ICONS[level];
+                            const current = dbBook?.access_level === level;
+                            return (
+                              <button
+                                key={level}
+                                disabled={current}
+                                onClick={() => {
+                                  handleBookVisibilityChange(level);
+                                  setMenuOpen(false);
+                                }}
+                                className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-surface-2 cursor-pointer ${
+                                  current
+                                    ? "bg-surface-2 font-bold text-foreground"
+                                    : "text-muted-foreground hover:text-foreground"
+                                }`}
+                              >
+                                <Icon className="h-3.5 w-3.5" />
+                                <span className="flex-1">{visibilityLabel(level)}</span>
+                                {current && <Check className="h-3 w-3 text-success" />}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                     )}

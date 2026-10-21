@@ -6,7 +6,7 @@
 // Needs a disposable PostgreSQL on 127.0.0.1 (PGPORT, default 54329, user postgres, trust auth).
 import { assert, assertEquals, assertNotEquals } from "jsr:@std/assert@1.0.13";
 import pg from "npm:pg@8.13.1";
-import { createHandler, createInsforgeStore, RateLimiter, sha256Hex, type Deps } from "../handler.ts";
+import { createHandler, createInsforgeStore, RateLimiter, readerText, sha256Hex, type Deps } from "../handler.ts";
 import { PgDb } from "./pg-db.ts";
 
 const port = Number(Deno.env.get("PGPORT") ?? "54329");
@@ -19,8 +19,10 @@ await admin.query(`create database ${dbName}`);
 const pool = new pg.Pool({ host, port, user: "postgres", database: dbName, max: 8 });
 const read = (p: string) => Deno.readTextFileSync(new URL(p, import.meta.url));
 await pool.query(read("../../proposals/rls-hardening/sandbox/schema.sql"));
-for (const f of ["01_access_predicates.sql", "02_reader_objects.sql", "03_policy_switch.sql", "04_helper_guard.sql"]) await pool.query(read(`../../proposals/rls-hardening/final/${f}`));
+// the full target state: hardening incl. the legacy freeze and the strict reader rule, then the MCP tables
+for (const f of ["01_access_predicates.sql", "02_reader_objects.sql", "02b_legacy_step_freeze.sql", "03_policy_switch.sql", "04_helper_guard.sql", "07_strict_reader_rule.sql"]) await pool.query(read(`../../proposals/rls-hardening/final/${f}`));
 await pool.query(read("../sql/001_mcp_tokens.sql"));
+await pool.query(read("../sql/002_mcp_ops.sql"));
 
 const U = { owner: "c0000000-0000-0000-0000-000000000001", editor: "c0000000-0000-0000-0000-000000000002", reviewer: "c0000000-0000-0000-0000-000000000003", viewer: "c0000000-0000-0000-0000-000000000004", stranger: "c0000000-0000-0000-0000-000000000005" };
 const B = { pub: "b0000000-0000-0000-0000-000000000001", other: "b0000000-0000-0000-0000-000000000002", arch: "b0000000-0000-0000-0000-000000000003" };
@@ -102,7 +104,7 @@ Deno.test({ name: "pg: token table is closed to anon/authenticated and enforces 
 
 Deno.test({ name: "pg: authentication through the real table; revoke and expiry take effect on the next request", ...opts, fn: async () => {
   assertEquals((await rpc(tok.owner, "tools/list")).status, 200);
-  const expired = await token(U.owner, ["read"], "2026-10-19T00:00:00Z"); // valid now, then force expiry below
+  const expired = await token(U.owner, ["read"], new Date(Date.now() + 86_400_000).toISOString()); // valid now (relative date, not a fixed one), then force expiry below
   assertEquals((await rpc(expired, "tools/list")).status, 200);
   await pool.query("update mcp_tokens set expires_at = now() - interval '1 second', created_at = now() - interval '2 days' where token_hash = $1", [await sha256Hex(expired)]);
   assertEquals((await rpc(expired, "tools/list")).status, 401);
@@ -145,13 +147,14 @@ Deno.test({ name: "pg: reads match the real reader function for every role, and 
 Deno.test({ name: "pg: create_phase / create_draft append with real unique positions, even in parallel (retry on 23505)", ...opts, fn: async () => {
   const ph = await tool(tok.editor, "create_phase", { book_id: B.pub, title: "Parallel phase" });
   assertEquals(ph.data.created, true); assertEquals(ph.data.phase.position, 2);
-  const results = await Promise.all(Array.from({ length: 6 }, (_, i) => tool(tok.owner, "create_draft", { phase_id: ph.data.phase.id, title: `Parallel ${i}`, markdown: `m${i} DRAFT_PARALLEL` })));
+  const results = await Promise.all(Array.from({ length: 10 }, (_, i) => tool(tok.owner, "create_draft", { phase_id: ph.data.phase.id, title: `Parallel ${i}`, markdown: `m${i} DRAFT_PARALLEL` })));
   const ok = results.filter((r) => r.isError === undefined);
   const positions = (await sql("select position from steps where phase_id = $1 order by position", [ph.data.phase.id])).map((r: { position: number }) => r.position);
   assertEquals(new Set(positions).size, positions.length, "positions must be unique");
   assertEquals(positions.length, ok.length);
-  assert(ok.length >= 3, "retries should let most parallel creates succeed: " + ok.length);
-  for (const r of results.filter((r) => r.isError)) assertEquals(code(r), "INTERNAL"); // exhausted retries fail loudly, never duplicate
+  // 10 parallel creates (the recorded TEST-project burst that gave 4/10 with 3 undelayed attempts): all must succeed now
+  assertEquals(ok.length, 10, "jittered retries must let every parallel create succeed: " + results.filter((r) => r.isError).map((r) => code(r)).join(","));
+  assertEquals(positions, Array.from({ length: 10 }, (_, i) => i + 1));
   const created = await sql("select created_by, content from steps where phase_id = $1 limit 1", [ph.data.phase.id]);
   assertEquals(created[0].created_by, U.owner); assertEquals(created[0].content.status, "Draft");
   // readers (SQL reader function) see none of the new drafts; draft viewers do
@@ -224,6 +227,96 @@ Deno.test({ name: "pg: archived books are read-only through MCP; backend failure
   await broken.end().catch(() => {});
   assert(!logs.join("\n").match(/dbk_[A-Za-z0-9_-]{8}_/), "no token in audit logs");
 } });
+
+Deno.test({ name: "pg: reader rule parity: handler.ts readerText == SQL reader_markdown over every content shape", ...opts, fn: async () => {
+  const pms = [undefined, "P", "", null, 7], sts = [undefined, "Published", "Draft", "Archived", "", null, 42], mds = [undefined, "M", "", null, 3];
+  const shapes: { c: Record<string, unknown>; bs: string }[] = [];
+  for (const pm of pms) for (const st of sts) for (const md of mds) for (const bs of ["PUBLISHED", "DRAFT", "ARCHIVED"]) {
+    const c: Record<string, unknown> = {};
+    if (pm !== undefined) c.publishedMarkdown = pm;
+    if (st !== undefined) c.status = st;
+    if (md !== undefined) c.markdown = md;
+    shapes.push({ c, bs });
+  }
+  const rows = await sql("select e.i, reader_markdown(e.v -> 'c', (e.v ->> 'bs')::publication_status) r from jsonb_array_elements($1::jsonb) with ordinality e(v, i) order by e.i", [JSON.stringify(shapes)]);
+  assertEquals(rows.length, 525);
+  for (const row of rows) { const s = shapes[Number(row.i) - 1]; assertEquals(row.r, readerText(s.c, s.bs), JSON.stringify(s)); }
+} });
+
+Deno.test({ name: "pg: update_draft refuses legacy steps; with 07 they are invisible to readers before and after (real reader function)", ...opts, fn: async () => {
+  const ph = (await tool(tok.owner, "create_phase", { book_id: B.pub, title: "Legacy phase" })).data.phase.id;
+  const legacy = { pub: "50000000-0000-0000-0000-0000000000a1", none: "50000000-0000-0000-0000-0000000000a2" };
+  await pool.query(stepSql, [legacy.pub, ph, "Legacy published", 1, JSON.stringify({ status: "Published", markdown: "OLD_LEGACY_PUB" })]);
+  await pool.query(stepSql, [legacy.none, ph, "Legacy no status", 2, JSON.stringify({ markdown: "OLD_LEGACY_NONE" })]);
+  const before = JSON.stringify(await readerTree(null, B.pub, false));
+  assert(!before.includes("OLD_LEGACY"), "strict rule: unfrozen legacy text is not served to readers");
+  for (const id of [legacy.pub, legacy.none]) {
+    const row = JSON.stringify(await sql("select content, updated_at from steps where id = $1", [id]));
+    const rev = (await tool(tok.editor, "get_step_content", { step_id: id })).data.revision;
+    assertEquals(code(await tool(tok.editor, "update_draft", { step_id: id, expected_revision: rev, markdown: "NEW_LEGACY_DRAFT", change_summary: "c" })), "LEGACY_STEP");
+    assertEquals(JSON.stringify(await sql("select content, updated_at from steps where id = $1", [id])), row, "nothing written");
+  }
+  assertEquals(JSON.stringify(await readerTree(null, B.pub, false)), before);
+  // 07's precondition refuses to run while such rows exist, so a re-run in this state must fail and change nothing
+  let rerun = false;
+  try { await pool.query(read("../../proposals/rls-hardening/final/07_strict_reader_rule.sql")); rerun = true; } catch { /* expected */ }
+  assert(!rerun, "07 precondition must refuse while reader-visible-by-fallback rows exist");
+  await pool.query("delete from steps where id = any($1::uuid[])", [[legacy.pub, legacy.none]]);
+} });
+
+Deno.test({ name: "pg: shared rate limit (mcp_rate_take) is atomic across concurrent callers and closed to the browser roles", ...opts, fn: async () => {
+  const store = createInsforgeStore(new PgDb(pool));
+  const tokenId = (await sql("select id from mcp_tokens where user_id = $1 limit 1", [U.viewer]))[0].id;
+  const results = await Promise.all(Array.from({ length: 25 }, () => store.rateTake!(tokenId, "publish", 10, 3600)));
+  assertEquals(results.filter(Boolean).length, 10, "exactly the limit may pass, whatever the interleaving");
+  for (const role of ["anon", "authenticated"]) {
+    const c = new pg.Client({ host, port, user: "postgres", database: dbName });
+    await c.connect();
+    try {
+      await c.query(`set role ${role}`);
+      let called = false, readTable = false;
+      try { await c.query("select public.mcp_rate_take($1::uuid, 'read', 5, 60)", [tokenId]); called = true; } catch { /* expected */ }
+      try { await c.query("select count(*) from public.mcp_rate_limits"); readTable = true; } catch { /* expected */ }
+      try { await c.query("select count(*) from public.mcp_audit_events"); readTable = true; } catch { /* expected */ }
+      assert(!called && !readTable, `${role} must not use the limiter or read the ops tables`);
+    } finally { await c.end(); }
+  }
+} });
+
+Deno.test({ name: "pg: durable audit rows for write calls (allowed and refused), ids and hashes only", ...opts, fn: async () => {
+  const d3: Deps = { ...deps, store: createInsforgeStore(new PgDb(pool)), durableAudit: true, durableLimits: true };
+  const h3 = createHandler(() => d3);
+  const call = async (token: string, name: string, args: unknown) => {
+    const res = await h3(new Request("http://local/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: `Bearer ${token}` }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }) }));
+    return { requestId: res.headers.get("x-request-id"), body: await res.json() };
+  };
+  const a = await call(tok.editor, "create_phase", { book_id: B.pub, title: "Audited phase AUDIT_TITLE" });
+  const b = await call(tok.viewer, "create_phase", { book_id: B.pub, title: "refused" });
+  const rows = await sql("select request_id::text, tool, outcome, book_id::text, content_sha256 from mcp_audit_events where request_id = any($1::uuid[]) order by at", [[a.requestId, b.requestId]]);
+  assertEquals(rows.map((r: { tool: string; outcome: string }) => [r.tool, r.outcome]), [["create_phase", "ok"], ["create_phase", "FORBIDDEN_ROLE"]]);
+  assertEquals(rows[0].book_id, B.pub);
+  assert(!JSON.stringify(await sql("select * from mcp_audit_events")).includes("AUDIT_TITLE"), "no titles in the audit table");
+} });
+
+Deno.test({ name: "pg: paging past 1000 steps keeps every visible step and never shows drafts to a viewer", ...opts, fn: async () => {
+  const ph = (await tool(tok.owner, "create_phase", { book_id: B.pub, title: "Big phase" })).data.phase.id;
+  // 1205 steps: every 3rd one published (publishedMarkdown), the rest drafts
+  await pool.query(`insert into steps(phase_id, title, position, content)
+    select $1::uuid, 'bulk ' || g, g,
+           case when g % 3 = 0 then jsonb_build_object('status', 'Published', 'markdown', 'BULK_PUB', 'publishedMarkdown', 'BULK_PUB')
+                else jsonb_build_object('status', 'Draft', 'markdown', 'BULK_DRAFT_SECRET') end
+      from generate_series(1, 1205) g`, [ph]);
+  const countIn = (t: { data: { phases: { id: string; steps: unknown[] }[] } }) => t.data.phases.find((p) => p.id === ph)?.steps.length ?? 0;
+  assertEquals(countIn(await tool(tok.owner, "get_book_structure", { book_id: B.pub })), 1205, "all steps across the 1000-row page boundary");
+  assertEquals(countIn(await tool(tok.viewer, "get_book_structure", { book_id: B.pub })), 401, "only the published ones (floor(1205/3))");
+  const tree = await readerTree("viewer", B.pub, true);
+  const treePhase = (tree as { phases: { id: string; steps: unknown[] }[] }).phases.find((p) => p.id === ph);
+  assertEquals(treePhase?.steps.length, 401, "the SQL reader function agrees");
+  assert(!JSON.stringify(tree).includes("BULK_DRAFT_SECRET"));
+  assertEquals((await tool(tok.viewer, "search_content", { query: "BULK_DRAFT_SECRET" })).data.results.length, 0);
+  await pool.query("delete from phases where id = $1", [ph]);
+} });
+
 
 Deno.test({ name: "pg: cleanup", ...opts, fn: async () => {
   await pool.end();

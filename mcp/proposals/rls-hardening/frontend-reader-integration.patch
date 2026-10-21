@@ -24,7 +24,7 @@ index 45219d5..67381d2 100644
    return (
      <BookReaderPage
 diff --git a/src/hooks/useBooks.ts b/src/hooks/useBooks.ts
-index 6906476..05edb47 100644
+index de78d72..1a04418 100644
 --- a/src/hooks/useBooks.ts
 +++ b/src/hooks/useBooks.ts
 @@ -1,5 +1,6 @@
@@ -34,7 +34,7 @@ index 6906476..05edb47 100644
  
  export function useBooks() {
    return useQuery<DBBook[]>({
-@@ -8,14 +9,26 @@ export function useBooks() {
+@@ -8,14 +9,27 @@ export function useBooks() {
    });
  }
  
@@ -58,6 +58,7 @@ index 6906476..05edb47 100644
 +    queryFn: () => (bookId ? DBService.getReaderTree(bookId, true) : Promise.resolve(null)),
 +    enabled: !!bookId,
 +    staleTime: 0,
++    gcTime: 0, // drop the tree (it may hold drafts for OWNER/EDITOR/REVIEWER) as soon as no page uses it, so it is never shown to the next user of the browser
 +  });
 +}
 +
@@ -66,15 +67,15 @@ index 6906476..05edb47 100644
      queryKey: ["book", bookId],
 diff --git a/src/lib/reader-tree.ts b/src/lib/reader-tree.ts
 new file mode 100644
-index 0000000..c4f09ca
+index 0000000..5851c59
 --- /dev/null
 +++ b/src/lib/reader-tree.ts
 @@ -0,0 +1,119 @@
 +// Contract of the database function public.reader_book_tree(target_book_id uuid, include_drafts boolean) -> jsonb
-+// (mcp/proposals/rls-hardening/02_reader_objects.sql) and its mapping onto the shapes the reader UI already uses.
++// (mcp/proposals/rls-hardening/final/02_reader_objects.sql) and its mapping onto the shapes the reader UI already uses.
 +//
 +// Output of the function:
-+//   null                                   book missing, not readable by the caller, or soft-deleted and caller is not its owner
++//   null                                   book missing, not readable by the caller, or soft-deleted (hidden from everyone, owner included)
 +//   { book, phases }
 +//   book   = { id, title, slug, description, cover_url, publication_status, access_level, estimated_read_time,
 +//              difficulty, tags, created_by, created_at, updated_at, creator: {id,name,avatar_url,bio} | null }
@@ -242,7 +243,7 @@ index 734e234..44214dd 100644
    const books = useMemo(() => {
      return dbBooks.map((b) => mapDBBookToProgressBook(b, stepCounts));
 diff --git a/src/services/db.ts b/src/services/db.ts
-index 2f74eba..7238934 100644
+index bc6692a..7c1d620 100644
 --- a/src/services/db.ts
 +++ b/src/services/db.ts
 @@ -1,4 +1,5 @@
@@ -306,7 +307,7 @@ index 2f74eba..7238934 100644
    async getBookStructure(bookId: string, isReaderView = false) {
      const phases = await this.getPhases(bookId);
      if (phases.length === 0) return [];
-@@ -363,29 +389,16 @@ export const DBService = {
+@@ -371,29 +397,16 @@ export const DBService = {
    },
  
    async resetBookProgress(userId: string, bookId: string): Promise<void> {

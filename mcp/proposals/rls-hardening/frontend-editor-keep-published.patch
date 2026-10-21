@@ -1,0 +1,141 @@
+diff --git a/src/routes/books/BookEditorPage.tsx b/src/routes/books/BookEditorPage.tsx
+index f0cd60d..8e748a4 100644
+--- a/src/routes/books/BookEditorPage.tsx
++++ b/src/routes/books/BookEditorPage.tsx
+@@ -1,3 +1,4 @@
++import { draftContentPatch } from "@/lib/step-content";
+ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+ import { motion } from "framer-motion";
+ import { TopBar } from "@/components/layout/TopBar";
+@@ -55,6 +56,7 @@ type StepNode = {
+   title: string;
+   slug: string;
+   markdown: string;
++  publishedMarkdown?: string; // what readers see; only the explicit Publish action changes it
+   description: string;
+   status: "Published" | "Draft" | "Archived";
+   estimatedTime: number;
+@@ -154,6 +156,7 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
+           title: s.title,
+           slug: s.slug || s.title.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+           markdown: s.markdown || "",
++          publishedMarkdown: s.publishedMarkdown, // kept separately from the editable draft; never written by autosave
+           description: s.description || "",
+           status: s.status || "Draft",
+           estimatedTime: s.estimatedTime || 10,
+@@ -292,16 +295,16 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
+           updates: {
+             title: activeStepFound.title,
+             position: stepPos,
+-            content: {
++            // Draft fields only: publishedMarkdown and status are never sent by autosave (only Publish changes them), and
++            // DBService.updateStep merges this into the current server content, so published text is always preserved.
++            content: draftContentPatch({
+               slug: activeStepFound.slug,
+               markdown: currentMarkdown,
+-              publishedMarkdown: (activeStepFound as any).publishedMarkdown,
+               description: activeStepFound.description,
+-              status: activeStepFound.status === "Published" ? "Published" : "Draft",
+               difficulty: activeStepFound.difficulty,
+               estimatedTime: activeStepFound.estimatedTime,
+               visibility: activeStepFound.visibility,
+-            },
++            }),
+           },
+         });
+       }
+diff --git a/src/services/db.ts b/src/services/db.ts
+index bc6692a..2257979 100644
+--- a/src/services/db.ts
++++ b/src/services/db.ts
+@@ -72,6 +72,9 @@ export interface DBStep {
+   };
+ }
+ 
++// (imported here, not at the top, so it does not collide with the access-level patch's import hunk)
++import { mergeStepContent } from "@/lib/step-content";
++
+ export const DBService = {
+   // --- USER PROFILE ---
+   async getProfile(userId: string): Promise<DBUser | null> {
+@@ -296,15 +299,38 @@ export const DBService = {
+     return data;
+   },
+ 
++  // `updates.content` is MERGED into the step's current server content (keys not sent keep their server value), so a draft
++  // save can never delete or roll back `publishedMarkdown`. The write is a compare-and-set on the trigger-maintained
++  // `updated_at`: if someone saved in between, the fresh row is re-read and merged again (bounded), never overwritten blindly.
+   async updateStep(stepId: string, updates: Partial<Omit<DBStep, "id" | "phase_id">>): Promise<DBStep> {
+-    const { data, error } = await insforge.database
+-      .from("steps")
+-      .update(updates)
+-      .eq("id", stepId)
+-      .select()
+-      .single();
+-    if (error) throw error;
+-    return data;
++    if (updates.content === undefined) {
++      const { data, error } = await insforge.database
++        .from("steps")
++        .update(updates)
++        .eq("id", stepId)
++        .select()
++        .single();
++      if (error) throw error;
++      return data;
++    }
++    for (let attempt = 0; attempt < 3; attempt++) {
++      const { data: current, error: readError } = await insforge.database
++        .from("steps")
++        .select("content, updated_at")
++        .eq("id", stepId)
++        .single();
++      if (readError) throw readError;
++      const content = mergeStepContent(current.content, updates.content as Record<string, unknown>);
++      const { data, error } = await insforge.database
++        .from("steps")
++        .update({ ...updates, content })
++        .eq("id", stepId)
++        .eq("updated_at", current.updated_at)
++        .select();
++      if (error) throw error;
++      if (data && data.length === 1) return data[0];
++    }
++    throw new Error("The step was changed elsewhere while saving. Reload the editor and try again.");
+   },
+ 
+   async deleteStep(stepId: string): Promise<void> {
+diff --git a/src/lib/step-content.ts b/src/lib/step-content.ts
+new file mode 100644
+index 0000000..76cea3c
+--- /dev/null
++++ b/src/lib/step-content.ts
+@@ -0,0 +1,28 @@
++// Rules for writing a step's `content` JSON from the editor.
++//
++// `content` holds BOTH the editable draft (`markdown`) and what readers see (`publishedMarkdown`). An ordinary save
++// (autosave, metadata edit) must only touch draft fields: publishing is a separate, explicit action. Saves are merged into
++// the step's CURRENT server content (see DBService.updateStep), so any key a save does not send keeps its server value.
++
++// The only keys an ordinary editor save may write. Deliberately NOT included:
++//   publishedMarkdown  - only the explicit Publish action sets it
++//   status             - changes only with Publish; a stale editor must not flip it
++export const DRAFT_CONTENT_KEYS = ["slug", "markdown", "description", "difficulty", "estimatedTime", "visibility"] as const;
++export type DraftContentKey = (typeof DRAFT_CONTENT_KEYS)[number];
++
++const isPlainObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
++
++// Keeps only draft keys with a defined value. `undefined` must never reach the database: JSON drops it, and with a
++// whole-object write that silently deleted the key (the bug that removed publishedMarkdown on autosave).
++export function draftContentPatch(fields: Partial<Record<DraftContentKey, unknown>> & Record<string, unknown>): Record<string, unknown> {
++  const out: Record<string, unknown> = {};
++  for (const key of DRAFT_CONTENT_KEYS) if (fields[key] !== undefined) out[key] = fields[key];
++  return out;
++}
++
++// Overlays `patch` on the server's current content. Keys absent from the patch, or `undefined` in it, keep the server value.
++export function mergeStepContent(serverContent: unknown, patch: Record<string, unknown>): Record<string, unknown> {
++  const merged: Record<string, unknown> = isPlainObject(serverContent) ? { ...serverContent } : {};
++  for (const [key, value] of Object.entries(patch)) if (value !== undefined) merged[key] = value;
++  return merged;
++}

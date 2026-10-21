@@ -7,7 +7,7 @@ if (!["127.0.0.1", "localhost", "::1", undefined].includes(process.env.PGHOST)) 
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 const pg = createRequire(path.join(process.env.PG_MODULE, "x.js"))("pg");
 const here = path.dirname(fileURLToPath(import.meta.url));
 const final = path.resolve(here, "..");
@@ -74,7 +74,7 @@ const priv = (await c.query("select has_function_privilege('anon','public.reader
 check(priv.a === false && priv.b === true, "reader_step_json not executable by anon, reader_markdown is");
 
 // --- 3b. the TEST-project seed loads and the hand-written API expectations hold against the real reader function
-const { verify, ACTORS } = await import(path.join(final, "..", "rpc-expectations.mjs"));
+const { verify, ACTORS } = await import(pathToFileURL(path.join(final, "..", "rpc-expectations.mjs")).href); // file URL: also correct on Windows
 const EMAILS = { owner: "owner", editor: "editor", reviewer: "reviewer", viewer: "viewer", stranger: "stranger" };
 const ids = {};
 for (const k of Object.keys(EMAILS)) {

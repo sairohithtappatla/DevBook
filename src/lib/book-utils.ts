@@ -26,7 +26,7 @@ export type Book = {
   category: string;
   creator: { username: string; name: string; avatar: string; bio?: string };
   cover: string;
-  visibility: "public" | "private" | "followers";
+  visibility: "public" | "unlisted" | "private" | "followers" | "selected";
   status: "published" | "draft";
   updatedAt: string;
   phases: Phase[];

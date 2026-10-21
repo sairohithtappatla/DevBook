@@ -104,8 +104,9 @@ $function$;
 
 -- PRE-EXISTING DEFECT, reproduced in the sandbox with your exact function and policy text (NOT yet confirmed on your
 -- live backend): can_manage_members is the only access helper that is not SECURITY DEFINER, yet it reads book_members
--- and is called by a policy ON book_members (modify_members). For a member the policy re-enters itself and the query
--- fails (stack depth; dataset dependent). Same body, now SECURITY DEFINER like can_edit_book / can_delete_book / can_read_book.
+-- and is called by a policy ON book_members (modify_members). For a non-owner member of a book they cannot read (in the
+-- original rules: a soft-deleted book) the policy re-enters itself and every query scanning that row fails with SQLSTATE
+-- 54001 (stack depth; deterministic, see final/README.md). Same body, now SECURITY DEFINER like can_edit_book / can_delete_book / can_read_book.
 CREATE OR REPLACE FUNCTION public.can_manage_members(target_book_id uuid, req_user_id uuid)
  RETURNS boolean
  LANGUAGE plpgsql

@@ -1,8 +1,10 @@
 {
   "nodeModulesDir": "none",
-  "lock": false,
+  "lock": {
+    "path": "./deno.lock",
+    "frozen": false
+  },
   "tasks": {
-    "test": "deno test --allow-net=127.0.0.1 --allow-env --allow-read=./handler.ts,./sql,../proposals/rls-hardening/final,../proposals/rls-hardening/sandbox tests/",
-    "serve": "deno run --allow-net=127.0.0.1 --allow-env=PORT local-server.ts"
+    "test": "deno test --allow-net=127.0.0.1 --allow-env --allow-read=./handler.ts,./sql,../proposals/rls-hardening/final,../proposals/rls-hardening/sandbox tests/"
   }
 }

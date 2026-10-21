@@ -30,3 +30,9 @@ SELECT n.nspname, c.relname, c.relrowsecurity AS rls_on FROM pg_class c JOIN pg_
 
 -- Q10: row counts only (no content), to size the fixture
 SELECT (SELECT count(*) FROM books) AS books, (SELECT count(*) FROM phases) AS phases, (SELECT count(*) FROM steps) AS steps, (SELECT count(*) FROM book_members) AS members, (SELECT count(*) FROM attachments) AS attachments
+
+-- Q11: shape of step content (counts only, no text) to size the legacy-step freeze (final/02b). Rows with published_type <> string AND (step_status = Published OR (step_status IS NULL AND publication_status = PUBLISHED AND markdown_type = string)) are the ones 02b freezes
+SELECT b.publication_status, s.content ->> 'status' AS step_status, jsonb_typeof(s.content -> 'publishedMarkdown') AS published_type, jsonb_typeof(s.content -> 'markdown') AS markdown_type, (b.deleted_at IS NOT NULL) AS book_deleted, count(*) AS steps FROM steps s JOIN phases p ON p.id = s.phase_id JOIN books b ON b.id = p.book_id GROUP BY 1, 2, 3, 4, 5 ORDER BY 1, 2, 3, 4, 5
+
+-- Q12: steps marked Published WITHOUT published text (ids, titles, timestamps only; no content) for the 02c decision. updated_at later than created_at usually means the browser editor's autosave removed publishedMarkdown
+SELECT s.id, s.title, b.title AS book_title, b.publication_status, b.access_level, s.created_at, s.updated_at, length(s.content ->> 'markdown') AS markdown_length FROM steps s JOIN phases p ON p.id = s.phase_id JOIN books b ON b.id = p.book_id WHERE jsonb_typeof(s.content -> 'publishedMarkdown') IS DISTINCT FROM 'string' AND s.content ->> 'status' = 'Published' ORDER BY b.title, s.title

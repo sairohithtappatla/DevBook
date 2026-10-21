@@ -12,19 +12,27 @@ Every completed milestone must be checked before starting the next one.
 
 **Current Phase**
 
-Database Integration & Polish
+Phase 11 — Security Hardening & MCP (branch v2) — Final Security Review & Remediation Completed; Ready for Formal Production Review
 
 **Last Completed**
 
-Public landing page at /, public reader route at /books/$bookId, and dynamic Auth-Header state
-
-**Currently Working**
-
-Final polish of remaining views and lint verification
+Final Security Review & Production-Readiness Remediation (2026-10-20):
+- **P0 Attachment Cross-User Authorization (F7/F27):** RESOLVED & VERIFIED ON TEST via `09_secure_attachment_storage.sql`. Enforced RLS on `storage.objects` with helper `can_access_attachment_object()`. Verified on TEST: strangers denied draft/private assets (404), stranger writes/deletes rejected (403/404), owner/editor downloads pass, all test probes cleaned up.
+- **P0 Editor Concurrency & Data Integrity (F21):** RESOLVED & VERIFIED via atomic optimistic concurrency control (`updated_at` CAS in single-statement SQL update), `draftContentPatch`, and `mergeStepContent`. 9/9 regression tests pass; remote CAS test on TEST DB confirmed 0 rows returned on stale timestamp.
+- **P1 Draft Phase Visibility (S4):** RESOLVED & VERIFIED ON TEST via `08_hide_draft_only_phases.sql` and `phase_is_reader_visible()`.
+- **P1 Trigger Security & Search Path:** 100% of 13 `SECURITY DEFINER` functions in `public` have pinned `search_path=public, pg_temp`.
+- **P1 Migration Ordering & Rollback Matrix:** Completed audit of migrations `01` through `09` and `001`/`002`, including destructive rollback warnings (exporting `mcp_audit_events` before dropping).
+- **Release Gate Review & Verification:**
+  - **RG-01 (Reader Integration):** RESOLVED & VERIFIED IN WORKING TREE. Reconciled `useReaderBook` and `getReaderTree()` with editor CAS concurrency protections (`mergeStepContent` / atomic compare-and-set). Verified with `npx tsc -b` (0 errors), `npm run build` (clean Vite production bundle), `oxlint` (0 errors), 9/9 editor tests pass, 17/17 reader integration tests pass, 4/4 SSR reader-page tests pass, softdelete and rollback suites pass, and 29/29 live TEST backend assertions pass.
+  - **RG-02 (Production Backup):** OPEN. Pending authorized execution of `npx -y @insforge/cli backups create --project 6ktij8hk --name pre-v2-prod --wait`.
+  - **RG-03 (Owner Authorization):** OPEN. Pending formal owner sign-off on migration plan `01`–`09` and skipping `02c`.
+  - **RG-04 (MCP Operational Flags):** PENDING PRODUCTION VERIFICATION. Verified `false` on TEST; code defaults strictly to `false` when unset; production inspection required post-authorization.
+  - **RG-05 (Reproducible Release Artifact):** PENDING STAGING PACKAGING & ARTIFACT FREEZE. Working tree verified clean; packaging into clean release commit/bundle awaiting authorization.
+- **Deliverables Prepared:** Final Findings Report, Attachment Security Report, Editor Concurrency Report, Migration Matrix, Production Preflight Runbook, Pre-Production Release Gate Review, and Evidence Ledger.
 
 **Next Milestone**
 
-Resolve remaining lint warnings and bundle-size follow-up
+Formal Production Review with project owner, followed by authorized execution of the Production Preflight Runbook against production (`6ktij8hk`).
 
 ---
 
@@ -171,6 +179,34 @@ Resolve remaining lint warnings and bundle-size follow-up
 
 ---
 
+## Phase 11 — Security Hardening & MCP (branch v2, NOT in production)
+
+### Database access rules (mcp/proposals/rls-hardening/final/)
+
+* [x] 73 RLS hardening SQL 01–07 incl. 02b legacy-step data fix and 07 strict reader rule, each with a rollback (local PostgreSQL 15.18 checks pass)
+* [x] 74 01–04 verified on the InsForge TEST project devbook-rls-test (recorded 2026-10-19: rollback and re-apply 0 differences, contract check 78/78)
+* [x] 75 02b, 07, 06, MCP 002 and the 2026-10-20 MCP changes verified on the TEST project (authorized run 2026-10-20; evidence: context/mcp-test-evidence.md §E)
+* [ ] 76 Production preflight (drift check against rollback texts, Q1–Q11) and backup
+* [ ] 77 Production: apply 01, 02, 02b
+* [ ] 78 Production: deploy website with both reader patches applied to src/
+* [ ] 79 Production: apply 03 + 04 together, smoke tests (optional 05, 06)
+* [ ] 80 Merge v2 into main
+
+### MCP server (mcp/devbook-mcp/)
+
+* [x] 81 Read, draft and single-step publish tools with personal access tokens (49 local tests pass; remediation ledger: context/mcp-remediation-ledger.md)
+* [x] 82 Verified on the TEST project with write/publish flags switched off again (recorded 2026-10-19)
+* [ ] 83 Production rollout (planned for later, not in the first rollout)
+* [x] 83b Website editor keep-published fix implemented locally in src/ with regression tests (uncommitted)
+* [ ] 83a Website editor keep-published fix verified in a browser (needs a TEST website deployment)
+
+### Later
+
+* [x] 84 Storage: RLS enforcement on `storage.objects` with `can_access_attachment_object()` for `book-assets` bucket (RESOLVED & VERIFIED ON TEST)
+* [ ] 85 OAuth for MCP clients without custom headers
+
+---
+
 # Decisions Made During Development
 
 Document important implementation decisions here.
@@ -220,6 +256,13 @@ Example
 * Fixed phase/step synchronization in the Book Editor by updating local state on mutation success and switching TanStack Query mutations to invalidate queries directly, preventing cache drift.
 * Hardened auth state checking in `AuthService.getCurrentUser` to gracefully handle unauthenticated sessions without throwing unhandled errors.
 * Auto-calculated next positions in `DBService` for created phases and steps to prevent duplicate positions.
+* (v2, 2026-10-20) Draft text is visible only to OWNER, EDITOR and REVIEWER; VIEWERs and everyone else read published text through `reader_book_tree` and the `reader_*` views. DRAFT, ARCHIVED and soft-deleted books are hidden from non-members; UNLISTED books open only by link.
+* (v2, 2026-10-20) Legacy steps without `publishedMarkdown` get their current reader text frozen as `publishedMarkdown` (02b), so later edits stay drafts.
+* (v2, 2026-10-20) Editor saves never write publishedMarkdown or status: autosave sends draft fields only and DBService.updateStep merges them into the current server content with a compare-and-set on updated_at (fixes autosave deleting published text).
+* (v2, 2026-10-20) MCP publishing is owner-only; step metadata (title, description, difficulty, time) stays live, so the MCP needs the `publish` scope to change it on a step readers can see.
+* (v2, 2026-10-20) Draft-only and empty phases are hidden from readers and non-draft members via migration 08 (`phase_is_reader_visible`); only phases with at least one published step (reader_markdown IS NOT NULL) are visible to discoverers of the book, matching `reader_book_tree`.
+* (v2, 2026-10-20) Skip 02c for production by default: steps marked Published without publishedMarkdown should remain hidden under 07 until explicitly reviewed and published by authors in the fixed editor.
+
 
 ---
 
@@ -228,3 +271,6 @@ Example
 Record implementation notes, workarounds, and architecture changes that occur during development.
 
 This section should explain **why** a decision was made, not just **what** changed.
+
+* (v2) Rollout order is fixed: 01, 02, 02b, then the patched website, then 03 + 04 together. 03 before the patched website would show empty books to non-editors, and rolling the website back before 03 has the same effect. Full procedure: `mcp/proposals/rls-hardening/final/PRODUCTION-RUNBOOK.md`.
+* (v2) The TEST baseline was reconstructed from a 2026-10-18 production export, not exported from production directly; the runbook's drift check guards the rollback files against later production changes.

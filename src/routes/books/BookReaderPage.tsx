@@ -4,7 +4,9 @@ import { TopBar } from "@/components/layout/TopBar";
 import { Markdown } from "@/components/Markdown";
 import { extractHeadings } from "@/lib/markdown-utils";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
-import { useBook, useBookStructure } from "@/hooks/useBooks";
+import { useReaderBook } from "@/hooks/useBooks";
+import { treeToBook, treeToStructure } from "@/lib/reader-tree";
+import { readerVisibility } from "@/lib/access-level";
 import { findStep, flattenSteps, type Book } from "@/lib/book-utils";
 import { useProgress } from "@/stores/progress";
 
@@ -35,8 +37,9 @@ const EMPTY_BOOK: Book = {
 };
 
 export function BookReaderPage({ bookId, onBack, onEdit }: Props) {
-  const { data: dbBook, isLoading: isBookLoading } = useBook(bookId);
-  const { data: dbBookStructure } = useBookStructure(bookId, true);
+  const { data: tree, isLoading: isBookLoading } = useReaderBook(bookId);
+  const dbBook = useMemo(() => (tree ? treeToBook(tree) : null), [tree]);
+  const dbBookStructure = useMemo(() => (tree ? treeToStructure(tree) : undefined), [tree]);
   const markLast = useProgress((s) => s.markLast);
 
   // Map dbBook and dbBookStructure to match standard Book structure
@@ -75,7 +78,7 @@ export function BookReaderPage({ bookId, onBack, onEdit }: Props) {
         bio: dbBook.creator?.bio || undefined,
       },
       cover: dbBook.cover_url || "workflow",
-      visibility: (dbBook.access_level?.toLowerCase() || "public") as any,
+      visibility: readerVisibility(dbBook.access_level),
       status: (dbBook.publication_status?.toLowerCase() || "published") as any,
       updatedAt: dbBook.updated_at || dbBook.created_at || new Date().toISOString(),
       phases,

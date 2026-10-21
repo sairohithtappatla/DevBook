@@ -1,6 +1,12 @@
 # DevBook MCP: local completion and handoff to real-backend verification
 
-State: branch `v2` (= `origin/v2` = `main` at 332a3ac), working tree clean apart from UNTRACKED proposal files. `src/` and every tracked file are unchanged (`git diff` is empty). No commit, push, deploy, migration, cloud resource or remote SQL. v1 untouched. Native PostgreSQL results here do not prove InsForge compatibility.
+## 0. Current state (updated 2026-10-20; supersedes the original state line and sections 2, 3 and 5 where they differ)
+- Git: the work is COMMITTED on `v2` (734c856, cc35ac3, 9da7167 = `origin/v2`); `main` (production) is unchanged at 332a3ac; `src/` is unchanged on v2. The 2026-10-20 review changes are local and uncommitted until approved.
+- TEST project `devbook-rls-test` (393cz2pc, **PostgreSQL 15.18**) **[recorded, Antigravity, 2026-10-19; raw outputs in the untracked `evidence/` folder]**: baseline loaded, original defects reproduced; 01, 02, 03, 04 applied with the expected results; reverse rollback restored the original catalog with 0 differences (and `01_rollback` before 02/03 fails safely with a dependency error); forward re-apply gave 0 differences; `rpc-contract-check.mjs` 78/78; MCP deployed with read tools, then write and publish tools, then the flags were switched OFF again; website patches verified on a scratch copy against the TEST project. Production: nothing applied.
+- Not yet on the TEST project: `02b`, `06`, and the 2026-10-20 handler changes (owner-only publish, legacy freeze, jittered append retry, token-bound confirmation, metadata needs `publish` on visible steps, viewer phase filter).
+- Corrections to statements made elsewhere: the backend is PostgreSQL **15.18** (not "18 devel"); MCP cold start is about **4 s** (3996 ms measured), not "<150 ms"; under the original code EDITORs could publish through MCP (now owner-only); the reader function is `reader_book_tree(target_book_id uuid, include_drafts boolean DEFAULT false)`; the write tools are `create_phase`, `create_draft`, `update_draft`, `update_step_metadata`, `publish_draft`.
+
+Original state line (2026-10-18, historical): branch `v2` (= `origin/v2` = `main` at 332a3ac), working tree clean apart from untracked proposal files; native PostgreSQL results do not prove InsForge compatibility.
 
 ## 1. What was completed
 | Area | Result | Where |
@@ -54,7 +60,20 @@ Skipped/failed: none in the script. **Not run anywhere:** any InsForge call, bro
 | the MCP handler itself | the project named by `INSFORGE_BASE_URL` of the function | deployed only by you; deploy from the TEST folder after the guard |
 Residual risk: the CLI uses whatever project is linked in the current folder (admin key) and its read-only commands still send a usage record to that project; keep a separate folder per project.
 
-## 5. Unresolved assumptions (all need the real InsForge test project)
+## 5. Assumptions
+Status after the TEST project run **[recorded, 2026-10-19]**:
+| # | Status |
+|---|---|
+| A1, A2, A3, A7, A8 (definer/owner bypass, `auth.uid()`, roles, RPC/view exposure, response envelope) | confirmed in practice: 01-04 behaved as designed through the API and `rpc-contract-check.mjs` passed 78/78 |
+| A6 PostgreSQL version | **15.18** |
+| A9 service credential reads/writes `mcp_tokens`, anon/authenticated cannot | confirmed |
+| A10 secrets and URL of a deployed function | confirmed; URL pattern `https://<app_key>.function2.insforge.app/<slug>` |
+| A12 storage | **REFUTED for non-members**: private bucket, anonymous 401, but any authenticated user who knows an object key can download it (no object-level rules); `getPublicUrl` links 401 when logged out |
+| A15 per-isolate rate limiting | **UNVERIFIED**: the test sent 200 sequential requests at ~2 s each, below the 60/min refill, so it could not trigger; do not rely on it (platform-level limits needed) |
+| A16 `npm:` imports resolve on hosted functions | confirmed; cold start ~4 s |
+| Parallel appends | 10 parallel `create_draft` gave 4 successes and 6 `INTERNAL` with the original 3-attempt retry (no data corruption); fixed locally 2026-10-20 (8 attempts, jittered backoff, `BUSY` instead of `INTERNAL`), not yet re-run on TEST |
+
+Original list (2026-10-18, before the TEST project run):
 A1 definer functions/views run as a role that bypasses RLS · A2 `auth.uid()` reads the JWT subject, NULL for anon · A3 database roles `anon`/`authenticated` exist and table grants are as modelled · A4 production DDL of `book_access`, `user_followers`, `step_progress`, `book_progress`, `book_revisions` (sandbox reconstructs them, incl. `ON DELETE CASCADE`) · A5 enum values · A6 PostgreSQL version · A7 `/api/database/rpc/<fn>` and `/records/<view>` forward functions/views; the API sets Postgres `role` to anon/authenticated (04 depends on it; if not, 04 is inert) · A8 RPC response envelope: jsonb returned as `data`, NULL as `null`, error shape/status for unknown or forbidden functions · A9 the service credential bypasses RLS and can read/write `mcp_tokens` while anon/authenticated cannot · A10 how a deployed function obtains `INSFORGE_BASE_URL`, secrets, and which hostname/path it is served on · A11 `steps.updated_at` trigger-maintained (verified from your export) and microsecond strings round-trip through the API filter · A12 bucket `book-assets`: your CLI output says Public: No; whether every object endpoint rejects anonymous and unauthorized users, how the website's `getPublicUrl` links in Markdown render for readers, whether authenticated non-members can list/download draft attachments · A13 sign-up/e-mail verification flow for creating the 5 test users · A14 a soft-deleted book can be set through the API by an owner (to seed the DELETED case) · A15 per-isolate rate limiting is acceptable · A16 the hosted functions runtime resolves the `npm:` imports of `handler.ts` (MCP SDK 1.32.1, zod 3.25.76, zod-to-json-schema 3.24.6, @insforge/sdk 1.5.2) within its bundle-size and cold-start limits (only the earlier echo probe ran on Deno locally; deploy that probe or the read-only handler first).
 
 ## 6. Verification plan for Antigravity (separate InsForge TEST project ONLY)
@@ -92,6 +111,7 @@ Rules for the agent: work only in the test project; never use or request product
 In order: `final/01_access_predicates.sql` -> `02_reader_objects.sql` -> `03_policy_switch.sql` -> `04_helper_guard.sql` -> (`05_optional_reset_my_book_progress.sql`), and `mcp/devbook-mcp/sql/001_mcp_tokens.sql`; rollbacks `*_rollback.sql` in reverse. Review notes: `final/README.md` ("Security review of the SQL as written", "Rollback review"). Points to look at specifically: F1-F3 are new decisions; 04 duplicates seven function bodies (drift check exists); 03 changes `insert_books`; 05 and `mcp_tokens` are optional/separate.
 
 ## 8. What remains before production
+**See `PRODUCTION-RUNBOOK.md` (2026-10-20) for the step-by-step go-live procedure.** Decisions taken 2026-10-20: MCP publishing owner-only; step metadata stays live (MCP needs the `publish` scope to change it on a visible step). Planned (not a final decision yet): MCP is not part of the first production rollout. The list below is the original one.
 1. Your decisions: F1, F2, F3, archived-books-read-only for MCP, optional 05, hide-from-everyone rule for soft-deleted books, MCP token table and write/publish enablement.
 2. Real-backend evidence for A1-A15 (section 6) with every phase green; especially API exposure of functions/views, role/GUC behaviour, service-credential privileges and the storage behaviour.
 3. Browser-level test of the patched website (reader, editor visibility menu, progress, counts) against the test project.

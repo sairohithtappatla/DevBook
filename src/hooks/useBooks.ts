@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { DBService, type DBBook } from "@/services/db";
+import type { ReaderTree } from "@/lib/reader-tree";
 
 export function useBooks() {
   return useQuery<DBBook[]>({
@@ -8,11 +9,24 @@ export function useBooks() {
   });
 }
 
-export function useBookStepCounts(bookIds: string[]) {
+export function useBookStepCounts(bookIds: string[], opts: { includeDrafts?: boolean } = {}) {
+  const includeDrafts = !!opts.includeDrafts;
   return useQuery<Record<string, number>>({
-    queryKey: ["book-step-counts", bookIds],
-    queryFn: () => DBService.getStepCounts(bookIds),
+    queryKey: ["book-step-counts", bookIds, includeDrafts],
+    queryFn: () => DBService.getStepCounts(bookIds, { includeDrafts }),
     enabled: bookIds.length > 0,
+  });
+}
+
+// One request for the reader: book, creator and visible structure. Key starts with ["book-structure", id] so the
+// existing invalidation of that prefix also refreshes it. staleTime 0: access rules and publication state can change.
+export function useReaderBook(bookId: string | null) {
+  return useQuery<ReaderTree | null>({
+    queryKey: ["book-structure", bookId, "reader-tree"],
+    queryFn: () => (bookId ? DBService.getReaderTree(bookId, true) : Promise.resolve(null)),
+    enabled: !!bookId,
+    staleTime: 0,
+    gcTime: 0, // drop the tree (it may hold drafts for OWNER/EDITOR/REVIEWER) as soon as no page uses it, so it is never shown to the next user of the browser
   });
 }
 

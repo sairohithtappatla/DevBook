@@ -1,4 +1,7 @@
+import type { AccessLevel } from "@/lib/access-level";
 import { insforge } from "@/lib/insforge";
+import { parseReaderTree, treeStepIds, type ReaderTree } from "@/lib/reader-tree";
+import { mergeStepContent } from "@/lib/step-content";
 
 export interface DBUser {
   id: string;
@@ -33,7 +36,7 @@ export interface DBBook {
   description: string | null;
   cover_url: string | null;
   publication_status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
-  access_level: "PUBLIC" | "FOLLOWERS" | "SELECTED" | "PRIVATE";
+  access_level: AccessLevel;
   estimated_read_time: number;
   difficulty: "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
   tags: string[];
@@ -71,6 +74,7 @@ export interface DBStep {
     visibility?: "Public" | "Followers" | "Selected" | "Private";
   };
 }
+
 
 export const DBService = {
   // --- USER PROFILE ---
@@ -168,19 +172,44 @@ export const DBService = {
     if (error) throw error;
   },
 
-  async getStepCounts(bookIds: string[]): Promise<Record<string, number>> {
+  // Step counts. Default = what any reader may see (view reader_book_step_counts: published steps of discoverable books).
+  // includeDrafts = true also counts unpublished steps for people who may view drafts (OWNER/EDITOR/REVIEWER): the
+  // base-table embed is only populated for them, so the per-book maximum of both numbers is used.
+  async getStepCounts(bookIds: string[], opts: { includeDrafts?: boolean } = {}): Promise<Record<string, number>> {
     if (bookIds.length === 0) return {};
-    const { data, error } = await insforge.database
-      .from("phases")
-      .select("book_id, steps(id)")
+    const { data: viewRows, error: viewError } = await insforge.database
+      .from("reader_book_step_counts")
+      .select("book_id, step_count")
       .in("book_id", bookIds);
-    if (error) throw error;
+    if (viewError) throw viewError;
     const counts: Record<string, number> = {};
-    for (const p of (data || []) as DBPhaseWithSteps[]) {
-      const stepCount = p.steps?.length || 0;
-      counts[p.book_id] = (counts[p.book_id] || 0) + stepCount;
+    for (const r of (viewRows || []) as { book_id: string; step_count: number }[]) {
+      counts[r.book_id] = r.step_count || 0;
+    }
+    if (opts.includeDrafts) {
+      const { data, error } = await insforge.database
+        .from("phases")
+        .select("book_id, steps(id)")
+        .in("book_id", bookIds);
+      if (error) throw error;
+      const withDrafts: Record<string, number> = {};
+      for (const p of (data || []) as DBPhaseWithSteps[]) {
+        withDrafts[p.book_id] = (withDrafts[p.book_id] || 0) + (p.steps?.length || 0);
+      }
+      for (const [id, n] of Object.entries(withDrafts)) counts[id] = Math.max(counts[id] || 0, n);
     }
     return counts;
+  },
+
+  // The reader's single read: book + creator + visible phases/steps (+ attachments) from reader_book_tree.
+  // includeDrafts only has an effect for OWNER/EDITOR/REVIEWER; the function ignores it for everyone else.
+  async getReaderTree(bookId: string, includeDrafts = true): Promise<ReaderTree | null> {
+    const { data, error } = await insforge.database.rpc("reader_book_tree", {
+      target_book_id: bookId,
+      include_drafts: includeDrafts,
+    });
+    if (error) throw error;
+    return parseReaderTree(data);
   },
 
   async getBookStructure(bookId: string, isReaderView = false) {
@@ -296,15 +325,38 @@ export const DBService = {
     return data;
   },
 
+  // `updates.content` is MERGED into the step's current server content (keys not sent keep their server value), so a draft
+  // save can never delete or roll back `publishedMarkdown`. The write is a compare-and-set on the trigger-maintained
+  // `updated_at`: if someone saved in between, the fresh row is re-read and merged again (bounded), never overwritten blindly.
   async updateStep(stepId: string, updates: Partial<Omit<DBStep, "id" | "phase_id">>): Promise<DBStep> {
-    const { data, error } = await insforge.database
-      .from("steps")
-      .update(updates)
-      .eq("id", stepId)
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
+    if (updates.content === undefined) {
+      const { data, error } = await insforge.database
+        .from("steps")
+        .update(updates)
+        .eq("id", stepId)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { data: current, error: readError } = await insforge.database
+        .from("steps")
+        .select("content, updated_at")
+        .eq("id", stepId)
+        .single();
+      if (readError) throw readError;
+      const content = mergeStepContent(current.content, updates.content as Record<string, unknown>);
+      const { data, error } = await insforge.database
+        .from("steps")
+        .update({ ...updates, content })
+        .eq("id", stepId)
+        .eq("updated_at", current.updated_at)
+        .select();
+      if (error) throw error;
+      if (data && data.length === 1) return data[0];
+    }
+    throw new Error("The step was changed elsewhere while saving. Reload the editor and try again.");
   },
 
   async deleteStep(stepId: string): Promise<void> {
@@ -371,29 +423,16 @@ export const DBService = {
   },
 
   async resetBookProgress(userId: string, bookId: string): Promise<void> {
-    const { data: phases, error: phasesError } = await insforge.database
-      .from("phases")
-      .select("id")
-      .eq("book_id", bookId);
-    if (phasesError) throw phasesError;
-
-    const phaseIds = phases?.map((p) => p.id) || [];
-    if (phaseIds.length > 0) {
-      const { data: steps, error: stepsError } = await insforge.database
-        .from("steps")
-        .select("id")
-        .in("phase_id", phaseIds);
-      if (stepsError) throw stepsError;
-
-      const stepIds = steps?.map((s) => s.id) || [];
-      if (stepIds.length > 0) {
-        const { error: spError } = await insforge.database
-          .from("step_progress")
-          .delete()
-          .eq("user_id", userId)
-          .in("step_id", stepIds);
-        if (spError) throw spError;
-      }
+    // Step ids come from the same function the reader uses (drafts included for people who may see them), because
+    // non-draft readers can no longer select from `phases` -> `steps` directly.
+    const stepIds = treeStepIds(await this.getReaderTree(bookId, true));
+    if (stepIds.length > 0) {
+      const { error: spError } = await insforge.database
+        .from("step_progress")
+        .delete()
+        .eq("user_id", userId)
+        .in("step_id", stepIds);
+      if (spError) throw spError;
     }
 
     const { error: bpError } = await insforge.database

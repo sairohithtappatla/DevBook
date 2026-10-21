@@ -94,7 +94,7 @@ function BookCoverSVG({ type }: { type: string }) {
 export function ProgressPage({ onBookSelect }: { onBookSelect?: (bookId: string) => void } = {}) {
   const { data: dbBooks = [] } = useBooks();
   const bookIds = useMemo(() => dbBooks.map((b) => b.id), [dbBooks]);
-  const { data: stepCounts } = useBookStepCounts(bookIds);
+  const { data: stepCounts } = useBookStepCounts(bookIds, { includeDrafts: true });
 
   const books = useMemo(() => {
     return dbBooks.map((b) => mapDBBookToProgressBook(b, stepCounts));
