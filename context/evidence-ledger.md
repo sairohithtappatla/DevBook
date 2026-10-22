@@ -74,3 +74,18 @@ All 26 evidence items are accounted for with explicit justifications and limitat
 | EVD-32 | Denied writes do not mutate | overwrite/delete attempts by stranger/viewer: content and objects unchanged | TEST | PASS |
 | EVD-33 | Cleanup + setting restore | users 0, profiles 0, books 0, objects 0, probe buckets 0, `requireEmailVerification=true`, RLS + 4 policies intact | TEST | PASS |
 | EVD-25 | Browser editor verification | unchanged | — | NOT TESTED |
+
+## Update 2026-10-22 (Claude Code) — PRODUCTION release (`6ktij8hk`)
+| ID | Control | Verification | Where | Status |
+|---|---|---|---|---|
+| EVD-34 | Backup before changes | `c6ce979c-de15-4c0e-83cb-d29de42f3ffa` (`pre-v2-prod-2026-10-21`) completed before the first migration | PROD | PASS |
+| EVD-35 | Migrations | 01 `20261021112737`, 02 `20261022113245`, 02b `20261022113409` (0 rows), 07 `20261022113601`, 06 `20261022113700`, MCP 001 `20261022115640`, MCP 002 `20261022115747`, 03 `20261022121700`, 04 `20261022121808`, 08 `20261022121920`. 02c NOT applied | PROD | PASS |
+| EVD-36 | Website | `main` = `992711f`; prebuilt with production InsForge values (no TEST reference in output) and deployed `vercel deploy --prebuilt --prod` -> `devbook-3j7cyeth8`; devbook.rohith.engineer serves bundle `index-CsQ-_0pI.js` containing `reader_book_tree` | PROD | PASS |
+| EVD-37 | Old site unaffected by 01-07 | anonymous base-table snapshot identical after each of 01/02/02b/07/06/001/002 | PROD | PASS |
+| EVD-38 | Reader after 03/04/08 | anonymous `reader_book_tree` of all 5 books identical before 03 and after 08 (14 phases, 105 steps, 0 unpublished); books snapshot hash identical to the pre-migration one | PROD | PASS |
+| EVD-39 | Anonymous negative matrix | steps 0 rows; members/attachments/invitations/mcp_tokens/backup tables 401; book insert refused; updates/deletes 0 rows; helper oracle false/denied | PROD (API) | PASS |
+| EVD-40 | Role smoke, throwaway book | 2 verified throwaway accounts (Gmail aliases, verification kept ON); 42/42: draft isolation, publish, autosave keeps published text, stale autosave refused, stranger writes/joins/oracle refused, UNLISTED/PRIVATE/DRAFT visibility, MCP create/update/publish + replay refused + foreign book NOT_FOUND; throwaway book deleted, its token revoked | PROD (API) | PASS |
+| EVD-41 | MCP live | function code identical to `handler.ts`; all flags on; 11 tools; durable rate limit + audit rows written; one active owner token (`FdjIqo7j`) | PROD | PASS |
+| EVD-42 | routing flow step `e7a376a7…` | hidden in the v2 reader (book shows 0 steps) pending owner republish; 02c not applied | PROD | OPEN (content owner) |
+| EVD-25 | Browser verification (reader, editor UI, console) | not performed by Claude Code; API checks only | PROD | NOT TESTED |
+| EVD-43 | Attachments / storage 09 | out of scope by owner decision; 09 not applied to production | PROD | NOT TESTED |
