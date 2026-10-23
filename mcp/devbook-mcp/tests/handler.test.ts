@@ -89,7 +89,7 @@ Deno.test("auth: missing, malformed, unknown, expired, revoked and scope-less to
 });
 Deno.test("auth: with OAuth configured, the 401 points to the protected resource metadata (RFC 9728)", async () => {
   const env = await setup();
-  env.deps.resourceMetadataUrl = "https://devbook.example/.well-known/oauth-protected-resource/mcp";
+  env.deps.publicOrigins = ["https://devbook.example"];
   const r = await rpc(env, null, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } });
   assertEquals(r.status, 401);
   assertEquals(r.headers.get("www-authenticate"), 'Bearer realm="devbook-mcp", resource_metadata="https://devbook.example/.well-known/oauth-protected-resource/mcp"');
@@ -140,7 +140,9 @@ Deno.test("http: unexpected exceptions return a generic 500 without internals", 
 Deno.test("tools/list is limited by scope and by the write/publish switches", async () => {
   const names = async (o: Parameters<typeof setup>[0], who: keyof typeof U = "owner") => { const env = await setup(o); return (await rpc(env, env.tok[who], "tools/list")).json.result.tools.map((t: { name: string }) => t.name) as string[]; };
   assertEquals((await names({ write: false, publish: false })).length, 6);
-  assertEquals((await names({ write: true, publish: false })).length, 10);
+  assertEquals((await names({ write: true, publish: false })).length, 11); // + create_book
+  assertEquals((await names({ write: true, publish: true })).length, 13); // + publish_draft, publish_book
+  assert(!(await names({ write: true, publish: true, key: false })).includes("publish_book"), "publish_book needs the HMAC key");
   assert((await names({ write: true, publish: true })).includes("publish_draft"));
   assert(!(await names({ write: true, publish: true, key: false })).includes("publish_draft"), "publish needs the HMAC key");
   assert(!(await names({ write: true, publish: true, scopes: ["read", "draft"] })).includes("publish_draft"), "publish needs the publish scope");
@@ -702,4 +704,110 @@ Deno.test("durable audit: every write/publish attempt (allowed or refused) is re
   const r = await tool(env, env.tok.editor, "create_phase", { book_id: ID.bk1, title: "Still works" });
   assertEquals(r.isError, undefined);
   assert(env.logs.some((l) => l.includes('"event":"audit_store_error"')));
+});
+
+// ---------------------------------------------------------------- discovery across website origins
+Deno.test("auth: the 401 names the metadata of the website the request came through, else the default origin", async () => {
+  const env = await setup();
+  env.deps.publicOrigins = ["https://devbook-45.vercel.app", "https://devbook.rohith.engineer"];
+  const meta = async (q: string) => (await env.handler(new Request(`http://local/mcp${q}`, { method: "POST", headers: H, body: "{}" }))).headers.get("www-authenticate");
+  assertStringIncludes((await meta(""))!, 'resource_metadata="https://devbook-45.vercel.app/.well-known/oauth-protected-resource/mcp"');
+  assertStringIncludes((await meta("?origin_host=devbook.rohith.engineer"))!, 'resource_metadata="https://devbook.rohith.engineer/.well-known/');
+  assertStringIncludes((await meta("?origin_host=evil.example"))!, 'resource_metadata="https://devbook-45.vercel.app/', "never an origin outside the list");
+});
+
+// ---------------------------------------------------------------- create_book / publish_book
+Deno.test("create_book: creates a DRAFT book owned by the caller; a second call with the same title returns it", async () => {
+  const env = await setup();
+  const r = await tool(env, env.tok.stranger, "create_book", { title: "  Docker Basics ", description: "Containers from zero", tags: ["Docker", "devops", "Docker"], difficulty: "Intermediate" });
+  assertEquals(r.data.created, true);
+  const b = r.data.book;
+  assertEquals(b.title, "Docker Basics");
+  assertEquals(b.publication_status, "DRAFT");
+  assertEquals(b.your_role, "OWNER");
+  assertEquals(b.tags, ["Docker", "devops"]);
+  assert(/^docker-basics-[a-z0-9]{5}$/.test(b.slug), b.slug);
+  assertEquals(env.store.bookExtras.get(b.id), { difficulty: "INTERMEDIATE", cover_url: "docker", created_by: U.stranger });
+  const again = await tool(env, env.tok.stranger, "create_book", { title: "docker basics" });
+  assertEquals(again.data.created, false);
+  assertEquals(again.data.book.id, b.id);
+  const other = await tool(env, env.tok.owner, "create_book", { title: "Docker Basics" });
+  assertEquals(other.data.created, true, "another user gets their own book");
+  assert(other.data.book.id !== b.id);
+  const ph = await tool(env, env.tok.stranger, "create_phase", { book_id: b.id, title: "Setup" });
+  assertEquals(ph.data.created, true);
+  const d = await tool(env, env.tok.stranger, "create_draft", { phase_id: ph.data.phase.id, title: "Install", markdown: "# Install" });
+  assertEquals(d.data.created, true);
+});
+Deno.test("create_book: needs the draft scope and write tools; validation errors never echo the input", async () => {
+  const ro = await setup({ scopes: ["read"] });
+  assertEquals(code(await tool(ro, ro.tok.owner, "create_book", { title: "X" })), "FORBIDDEN_SCOPE");
+  const off = await setup({ write: false });
+  assertEquals(code(await tool(off, off.tok.owner, "create_book", { title: "X" })), "NOT_AVAILABLE");
+  const env = await setup();
+  const before = env.store.snapshot();
+  const bad = await tool(env, env.tok.owner, "create_book", { title: `bad\u0007${DRAFT_CANARY}` });
+  assertEquals(code(bad), "VALIDATION");
+  assert(!bad.text.includes(DRAFT_CANARY));
+  assertEquals(code(await tool(env, env.tok.owner, "create_book", { title: "T", tags: ["a", "b", "c", "d", "e", "f"] })), "VALIDATION");
+  assertEquals(code(await tool(env, env.tok.owner, "create_book", { title: "T", owner_id: U.stranger })), "VALIDATION", "no way to create a book for someone else");
+  assertEquals(env.store.snapshot(), before);
+});
+async function newBookWithPublishedStep(env: Env) {
+  const b = (await tool(env, env.tok.owner, "create_book", { title: "My Guide" })).data.book;
+  const ph = (await tool(env, env.tok.owner, "create_phase", { book_id: b.id, title: "P" })).data.phase;
+  const st = (await tool(env, env.tok.owner, "create_draft", { phase_id: ph.id, title: "S", markdown: "# S" })).data.step;
+  const pv = await tool(env, env.tok.owner, "publish_draft", { step_id: st.id });
+  await tool(env, env.tok.owner, "publish_draft", { step_id: st.id, confirm: true, confirmation_token: pv.data.confirmation_token, confirm_title: "S" });
+  return b;
+}
+Deno.test("publish_book: preview changes nothing; confirm with token + exact title publishes the book", async () => {
+  const env = await setup();
+  const b = await newBookWithPublishedStep(env);
+  const before = env.store.snapshot();
+  const pv = await tool(env, env.tok.owner, "publish_book", { book_id: b.id, access_level: "UNLISTED" });
+  assertEquals(pv.data.preview, true);
+  assertEquals(pv.data.reader_visible_steps, 1);
+  assertEquals(pv.data.after, { publication_status: "PUBLISHED", access_level: "UNLISTED", meaning: "readable by anyone with the link, not listed" });
+  assertEquals(env.store.snapshot(), before, "preview writes nothing");
+  assertEquals(code(await tool(env, env.tok.owner, "publish_book", { book_id: b.id, access_level: "UNLISTED", confirm: true, confirmation_token: pv.data.confirmation_token, confirm_title: "my guide" })), "CONFIRMATION_INVALID", "exact title");
+  assertEquals(code(await tool(env, env.tok.owner, "publish_book", { book_id: b.id, access_level: "PUBLIC", confirm: true, confirmation_token: pv.data.confirmation_token, confirm_title: "My Guide" })), "CONFIRMATION_INVALID", "token is bound to the access level");
+  assertEquals(code(await tool(env, env.tok.owner, "publish_book", { book_id: b.id, access_level: "UNLISTED", confirm: true })), "CONFIRMATION_REQUIRED");
+  const done = await tool(env, env.tok.owner, "publish_book", { book_id: b.id, access_level: "UNLISTED", confirm: true, confirmation_token: pv.data.confirmation_token, confirm_title: "My Guide" });
+  assertEquals(done.data.published, true);
+  const row = env.store.books.find((x) => x.id === b.id)!;
+  assertEquals([row.publication_status, row.access_level], ["PUBLISHED", "UNLISTED"]);
+  assert(env.store.bookExtras.get(b.id)?.published_at, "first publication date set");
+});
+Deno.test("publish_book: owner only, needs publish scope; tokens are bound to user, token, operation, book and revision", async () => {
+  const env = await setup();
+  const before = env.store.snapshot();
+  for (const who of ["editor", "reviewer", "viewer"] as const) assertEquals(code(await tool(env, env.tok[who], "publish_book", { book_id: ID.bk1 })), "FORBIDDEN_ROLE", who);
+  assertEquals(code(await tool(env, env.tok.stranger, "publish_book", { book_id: ID.bk1 })), "NOT_FOUND");
+  assertEquals(code(await tool(env, env.tok.owner, "publish_book", { book_id: ID.bkArch })), "BOOK_ARCHIVED");
+  assertEquals(code(await tool(env, env.tok.owner, "publish_book", { book_id: ID.bkDel })), "NOT_FOUND", "soft-deleted");
+  assertEquals(env.store.snapshot(), before);
+  const ds = await setup({ scopes: ["read", "draft"] });
+  assertEquals(code(await tool(ds, ds.tok.owner, "publish_book", { book_id: ID.bk1 })), "FORBIDDEN_SCOPE");
+
+  const b = await newBookWithPublishedStep(env);
+  const pv = await tool(env, env.tok.owner, "publish_book", { book_id: b.id });
+  const other = await mkToken(env.store, U.owner, { scopes: ["read", "draft", "publish"] });
+  assertEquals(code(await tool(env, other, "publish_book", { book_id: b.id, confirm: true, confirmation_token: pv.data.confirmation_token, confirm_title: "My Guide" })), "CONFIRMATION_INVALID", "other token");
+  const stepId = env.store.steps.find((s) => s.title === "S")!.id;
+  const stepPv = await tool(env, env.tok.owner, "publish_draft", { step_id: stepId });
+  assertEquals(code(await tool(env, env.tok.owner, "publish_book", { book_id: b.id, confirm: true, confirmation_token: stepPv.data.confirmation_token, confirm_title: "My Guide" })), "CONFIRMATION_INVALID", "step token replayed as book token");
+  env.store.touchBook(b.id);
+  assertEquals(code(await tool(env, env.tok.owner, "publish_book", { book_id: b.id, confirm: true, confirmation_token: pv.data.confirmation_token, confirm_title: "My Guide" })), "CONFLICT", "book changed after preview");
+  const pv2 = await tool(env, env.tok.owner, "publish_book", { book_id: b.id });
+  env.now.t += 11 * 60 * 1000;
+  assertEquals(code(await tool(env, env.tok.owner, "publish_book", { book_id: b.id, confirm: true, confirmation_token: pv2.data.confirmation_token, confirm_title: "My Guide" })), "CONFIRMATION_EXPIRED");
+  assertEquals(env.store.books.find((x) => x.id === b.id)!.publication_status, "DRAFT", "no refused attempt published anything");
+});
+Deno.test("publish_book: the preview warns when readers would see an empty book", async () => {
+  const env = await setup();
+  const b = (await tool(env, env.tok.owner, "create_book", { title: "Empty" })).data.book;
+  const pv = await tool(env, env.tok.owner, "publish_book", { book_id: b.id });
+  assertEquals(pv.data.reader_visible_steps, 0);
+  assertStringIncludes(pv.data.warning, "empty book");
 });

@@ -30,7 +30,9 @@ export type BookRow = {
   publication_status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
   access_level: string;
   deleted_at: string | null;
+  updated_at?: string; // trigger-maintained; compare-and-set for book changes
 };
+export type NewBook = { title: string; slug: string; description: string; tags: string[]; difficulty: "BEGINNER" | "INTERMEDIATE" | "ADVANCED"; coverUrl: string; createdBy: string };
 export type MemberBook = { book: BookRow; role: Role };
 export type PhaseRow = { id: string; book_id: string; title: string; position: number };
 export type StepContent = Record<string, unknown>;
@@ -59,6 +61,10 @@ export interface Store {
   insertStep(phaseId: string, title: string, content: StepContent, createdBy: string): Promise<StepRow>; // appends
   // Compare-and-set on updated_at. Resolves null when the row changed (or does not exist): nothing was written.
   updateStepCas(stepId: string, expectedUpdatedAt: string, patch: { title?: string; content?: StepContent }): Promise<StepRow | null>;
+  // New DRAFT book; the database trigger adds the creator as OWNER in book_members.
+  insertBook(b: NewBook): Promise<BookRow>;
+  // Compare-and-set on books.updated_at. Resolves null when the row changed: nothing was written.
+  updateBookCas(bookId: string, expectedUpdatedAt: string, patch: { publication_status?: "PUBLISHED"; access_level?: "PUBLIC" | "UNLISTED"; published_at?: string }): Promise<BookRow | null>;
   // Optional, shared across isolates (sql/002_mcp_ops.sql). Fixed window: true = allowed, false = over the limit.
   rateTake?(tokenId: string, bucket: RateBucket, limit: number, windowSeconds: number): Promise<boolean>;
   // Optional durable audit trail of write/publish calls (sql/002_mcp_ops.sql). Same allowlisted fields as the log line.
@@ -77,7 +83,9 @@ export type Deps = {
   limiter: RateLimiter;
   durableLimits?: boolean; // DEVBOOK_MCP_DURABLE_LIMITS=true: also enforce the shared per-token limits of store.rateTake
   durableAudit?: boolean; // DEVBOOK_MCP_DURABLE_AUDIT=true: also store write/publish calls via store.recordAudit
-  resourceMetadataUrl?: string | null; // OAuth discovery (RFC 9728): advertised in the 401 so clients can start "Connect DevBook"
+  // OAuth discovery (RFC 9728): website origins that proxy /mcp, first = default. The 401 advertises the metadata of the
+  // origin the request came through (origin_host query parameter added by the website proxy), else the default.
+  publicOrigins?: string[];
 };
 
 // ------------------------------------------------------------------------------------------------ constants
@@ -160,6 +168,7 @@ const markdown = z.string().max(100_000).refine((s) => !MD_CTRL.test(s), "contro
 const uuid = z.string().uuid();
 const revision = z.string().min(10).max(40).regex(/^[0-9T:.+\-Z ]+$/, "not a revision string");
 const difficulty = z.enum(["Beginner", "Intermediate", "Advanced"]);
+const confirmFields = { confirm: z.boolean().optional(), confirmation_token: z.string().min(20).max(1000).optional(), confirm_title: text(200).optional() };
 
 const schemas = {
   search_books: z.object({ query: optText(200).optional(), limit: z.number().int().min(1).max(25).optional(), cursor: z.string().regex(/^\d{1,5}$/).optional() }).strict(),
@@ -173,7 +182,9 @@ const schemas = {
   update_draft: z.object({ step_id: uuid, expected_revision: revision, markdown, change_summary: text(300) }).strict(),
   update_step_metadata: z.object({ step_id: uuid, expected_revision: revision, title: text(200).optional(), description: optText(500).optional(), difficulty: difficulty.optional(), estimated_minutes: z.number().int().min(1).max(600).optional() }).strict()
     .refine((v) => v.title !== undefined || v.description !== undefined || v.difficulty !== undefined || v.estimated_minutes !== undefined, "give at least one field to change"),
-  publish_draft: z.object({ step_id: uuid, confirm: z.boolean().optional(), confirmation_token: z.string().min(20).max(1000).optional(), confirm_title: text(200).optional() }).strict(),
+  publish_draft: z.object({ step_id: uuid, ...confirmFields }).strict(),
+  create_book: z.object({ title: text(200), description: optText(500).optional(), tags: z.array(text(40)).max(5).optional(), difficulty: difficulty.optional() }).strict(),
+  publish_book: z.object({ book_id: uuid, access_level: z.enum(["PUBLIC", "UNLISTED"]).optional(), ...confirmFields }).strict(),
 } as const;
 type ToolName = keyof typeof schemas;
 
@@ -190,6 +201,8 @@ const TOOLS: ToolDef[] = [
   { name: "update_draft", scope: "draft", write: true, title: "Update draft Markdown", description: "Replaces the draft Markdown of a step. Requires the revision you read; never touches published text, status, slug or visibility. Refused (LEGACY_STEP) for old steps whose published text is not stored separately." },
   { name: "update_step_metadata", scope: "draft", write: true, title: "Update step metadata", description: "Changes title, description, difficulty or estimated minutes. Requires the revision you read. The slug never changes. Metadata is not drafted: on a step readers can already see, the change is visible immediately, so it also needs the 'publish' scope." },
   { name: "publish_draft", scope: "publish", write: true, destructive: true, title: "Publish one step", description: "Book OWNER only. Two phases. confirm=false returns a preview and a confirmation token; confirm=true with the token and the exact current title publishes THIS step only. Ask the human before confirming." },
+  { name: "create_book", scope: "draft", write: true, title: "Create book", description: "Creates a new book owned by you, as a DRAFT that readers cannot see. Returns the existing book when you already own one with the same title. Then add phases (create_phase) and steps (create_draft), publish steps (publish_draft) and finally the book (publish_book)." },
+  { name: "publish_book", scope: "publish", write: true, destructive: true, title: "Publish a book", description: "Book OWNER only. Makes the book visible to readers: PUBLIC (listed) or UNLISTED (link only). Two phases like publish_draft: confirm=false returns a preview (how many steps readers will see) and a token; confirm=true with the token and the exact book title publishes it. Readers only see steps that were published. Ask the human before confirming." },
 ];
 
 // ------------------------------------------------------------------------------------------------ results
@@ -303,20 +316,23 @@ function snippet(haystack: string, needle: string): string {
 async function hmacKey(key: Uint8Array, usages: KeyUsage[]) {
   return await crypto.subtle.importKey("raw", key as unknown as BufferSource, { name: "HMAC", hash: "SHA-256" }, false, usages);
 }
-type ConfirmPayload = { op: "publish_draft"; sub: string; tid: string; step: string; rev: string; h: string; exp: number };
+// op names the action; step = the target id (a step for publish_draft, a book for publish_book); rev = the target revision;
+// h = hash of what will become visible (draft text, or the requested access level). Bound to user AND token.
+type ConfirmOp = "publish_draft" | "publish_book";
+type ConfirmPayload = { op: ConfirmOp; sub: string; tid: string; step: string; rev: string; h: string; exp: number };
 export async function makeConfirmation(key: Uint8Array, p: ConfirmPayload): Promise<string> {
   const body = b64url(enc.encode(JSON.stringify(p)));
   const sig = new Uint8Array(await crypto.subtle.sign("HMAC", await hmacKey(key, ["sign"]), enc.encode(body)));
   return `${body}.${b64url(sig)}`;
 }
-async function readConfirmation(key: Uint8Array, token: string): Promise<ConfirmPayload | null> {
+async function readConfirmation(key: Uint8Array, token: string, op: ConfirmOp): Promise<ConfirmPayload | null> {
   const [body, sig, extra] = token.split(".");
   if (!body || !sig || extra !== undefined) return null;
   try {
     const good = await crypto.subtle.verify("HMAC", await hmacKey(key, ["verify"]), unb64url(sig), enc.encode(body)); // constant-time
     if (!good) return null;
     const p = JSON.parse(new TextDecoder().decode(unb64url(body)));
-    return p?.op === "publish_draft" && typeof p.sub === "string" && typeof p.tid === "string" && typeof p.step === "string" && typeof p.rev === "string" && typeof p.h === "string" && typeof p.exp === "number" ? p : null;
+    return p?.op === op && typeof p.sub === "string" && typeof p.tid === "string" && typeof p.step === "string" && typeof p.rev === "string" && typeof p.h === "string" && typeof p.exp === "number" ? p : null;
   } catch { return null; }
 }
 function lineDiff(before: string, after: string) {
@@ -498,7 +514,7 @@ const handlers: Record<ToolName, Handler> = {
       };
     }
     if (!a.confirmation_token || a.confirm_title === undefined) throw new ToolFail("CONFIRMATION_REQUIRED");
-    const p = await readConfirmation(key, a.confirmation_token);
+    const p = await readConfirmation(key, a.confirmation_token, "publish_draft");
     if (!p || p.sub !== ctx.p.userId || p.tid !== ctx.p.tokenId || p.step !== step.id) throw new ToolFail("CONFIRMATION_INVALID"); // same user AND same token
     if (p.exp <= ctx.deps.now()) throw new ToolFail("CONFIRMATION_EXPIRED");
     if (p.rev !== step.updated_at || p.h !== h) throw new ToolFail("CONFLICT", { current_revision: step.updated_at });
@@ -513,10 +529,78 @@ const handlers: Record<ToolName, Handler> = {
       reader_note: "Readers only see published steps of a PUBLISHED book that their access level allows.",
     };
   },
+  async create_book(ctx, a: z.infer<typeof schemas.create_book>) {
+    // Retried calls must not create duplicates: an existing book you OWN with the same title is returned instead.
+    const owned = (await ctx.deps.store.listMemberBooks(ctx.p.userId)).filter((m) => m.role === "OWNER");
+    const same = owned.find((m) => norm(m.book.title) === norm(a.title));
+    if (same) {
+      ctx.touched.bookId = same.book.id;
+      return { book: bookSummary(same), created: false, note: "You already own a book with this title; it was returned unchanged." };
+    }
+    const tags = [...new Set((a.tags ?? []).map((t) => t.trim()).filter(Boolean))];
+    const level = a.difficulty ?? "Beginner";
+    // Same shape as the website's "New book" (MyBooksPage): DRAFT, slug = title + 5 random characters, cover from the first tag.
+    const suffix = [...crypto.getRandomValues(new Uint8Array(5))].map((b) => "abcdefghijklmnopqrstuvwxyz0123456789"[b % 36]).join("");
+    const book = await ctx.deps.store.insertBook({
+      title: a.title, slug: `${slugify(a.title).slice(0, 60)}-${suffix}`, description: a.description ?? "", tags,
+      difficulty: level === "Advanced" ? "ADVANCED" : level === "Intermediate" ? "INTERMEDIATE" : "BEGINNER",
+      coverUrl: (tags[0] ?? "general").toLowerCase(), createdBy: ctx.p.userId,
+    });
+    ctx.touched.bookId = book.id;
+    return {
+      book: bookSummary({ book, role: "OWNER" }), created: true,
+      next: "Add phases with create_phase and steps with create_draft. Readers see nothing until steps are published (publish_draft) and the book is published (publish_book).",
+    };
+  },
+  async publish_book(ctx, a: z.infer<typeof schemas.publish_book>) {
+    const key = ctx.deps.confirmKey;
+    if (!key) throw new ToolFail("NOT_AVAILABLE");
+    const mb = await bookFor(ctx, a.book_id);
+    requirePublish(mb);
+    const target = a.access_level ?? "PUBLIC";
+    const rev = mb.book.updated_at ?? "";
+    ctx.touched.revisionBefore = rev || undefined;
+    const { phases, steps } = await booksSteps(ctx, mb);
+    const visible = steps.filter((s) => readerText(s.content, "PUBLISHED") !== null);
+    if (!a.confirm) {
+      const token = await makeConfirmation(key, { op: "publish_book", sub: ctx.p.userId, tid: ctx.p.tokenId, step: mb.book.id, rev, h: target, exp: ctx.deps.now() + CONFIRM_TTL_MS });
+      return {
+        preview: true, book_id: mb.book.id, title: mb.book.title,
+        current: { publication_status: mb.book.publication_status, access_level: mb.book.access_level },
+        after: { publication_status: "PUBLISHED", access_level: target, meaning: target === "PUBLIC" ? "listed for everyone" : "readable by anyone with the link, not listed" },
+        reader_visible_steps: visible.length, unpublished_steps: steps.length - visible.length, phases: phases.length,
+        ...(visible.length === 0 ? { warning: "No step is published yet: readers would see an empty book. Publish steps with publish_draft first." } : {}),
+        confirmation_token: token, expires_in_seconds: CONFIRM_TTL_MS / 1000,
+        next: "Show this preview to the person. Only after they agree, call again with confirm=true, confirmation_token and confirm_title equal to the exact book title.",
+      };
+    }
+    if (!a.confirmation_token || a.confirm_title === undefined) throw new ToolFail("CONFIRMATION_REQUIRED");
+    const p = await readConfirmation(key, a.confirmation_token, "publish_book");
+    if (!p || p.sub !== ctx.p.userId || p.tid !== ctx.p.tokenId || p.step !== mb.book.id || p.h !== target) throw new ToolFail("CONFIRMATION_INVALID");
+    if (p.exp <= ctx.deps.now()) throw new ToolFail("CONFIRMATION_EXPIRED");
+    if (p.rev !== rev) throw new ToolFail("CONFLICT", { message_detail: "The book changed since the preview. Run the preview again." });
+    if (a.confirm_title !== mb.book.title.trim()) throw new ToolFail("CONFIRMATION_INVALID");
+    const next = await ctx.deps.store.updateBookCas(mb.book.id, rev, {
+      publication_status: "PUBLISHED", access_level: target,
+      ...(mb.book.publication_status === "PUBLISHED" ? {} : { published_at: new Date(ctx.deps.now()).toISOString() }),
+    });
+    if (!next) throw new ToolFail("CONFLICT");
+    ctx.touched.revisionAfter = next.updated_at;
+    return {
+      published: true, book_id: next.id, publication_status: next.publication_status, access_level: next.access_level,
+      reader_visible_steps: visible.length,
+      changed: "Only the book's publication status, access level and first publication date. No step text was changed.",
+    };
+  },
 };
 
+function bookSummary(m: MemberBook) {
+  const b = m.book;
+  return { id: b.id, title: b.title, slug: b.slug, description: b.description, tags: b.tags ?? [], publication_status: b.publication_status, access_level: b.access_level, your_role: m.role };
+}
+
 export function availableTools(p: Principal, deps: Pick<Deps, "writeToolsEnabled" | "publishToolEnabled" | "confirmKey">): ToolDef[] {
-  return TOOLS.filter((t) => p.scopes.includes(t.scope) && (!t.write || deps.writeToolsEnabled) && (t.name !== "publish_draft" || (deps.publishToolEnabled && deps.confirmKey !== null)));
+  return TOOLS.filter((t) => p.scopes.includes(t.scope) && (!t.write || deps.writeToolsEnabled) && ((t.name !== "publish_draft" && t.name !== "publish_book") || (deps.publishToolEnabled && deps.confirmKey !== null)));
 }
 
 // Only real tool names reach the audit log; anything the caller invented is logged as "unknown".
@@ -538,7 +622,7 @@ export async function callTool(deps: Deps, p: Principal, name: unknown, rawArgs:
     // Shared limit across all isolates (optional, needs sql/002_mcp_ops.sql). If the limit store fails, writes and publishing
     // fail CLOSED (BUSY, nothing done) and reads fail OPEN (the per-isolate limiter above still applies).
     if (deps.durableLimits && deps.store.rateTake) {
-      const bucket: RateBucket = def.name === "publish_draft" ? "publish" : def.write ? "write" : "read";
+      const bucket: RateBucket = def.name === "publish_draft" || def.name === "publish_book" ? "publish" : def.write ? "write" : "read";
       let allowed = true;
       try { allowed = await deps.store.rateTake(p.tokenId, bucket, DURABLE_LIMITS[bucket], 60); } catch {
         writeAudit(deps, { event: "rate_store_error", requestId, tokenId: p.tokenId, userId: p.userId, tool: def.name, outcome: def.write ? "BUSY" : "allowed" });
@@ -654,8 +738,9 @@ async function handleRequest(getDeps: () => Deps | Promise<Deps>, req: Request, 
     }
     if (!principal) {
       writeAudit(deps, { event: "auth", requestId, outcome: "UNAUTHENTICATED" });
-      const challenge = deps.resourceMetadataUrl
-        ? `Bearer realm="devbook-mcp", resource_metadata="${deps.resourceMetadataUrl}"`
+      const origin = pickOrigin(deps.publicOrigins ?? [], new URL(req.url).searchParams.get("origin_host"));
+      const challenge = origin
+        ? `Bearer realm="devbook-mcp", resource_metadata="${origin}/.well-known/oauth-protected-resource/mcp"`
         : 'Bearer realm="devbook-mcp"';
       return jsonRpcError(401, -32001, "Unauthorized.", { "www-authenticate": challenge, "access-control-expose-headers": "www-authenticate" });
     }
@@ -684,7 +769,7 @@ async function handleRequest(getDeps: () => Deps | Promise<Deps>, req: Request, 
 // exercised against a SQL-backed emulator in tests/pg-db.ts.
 // deno-lint-ignore no-explicit-any
 export type DbLike = { from(table: string): any; rpc?(fn: string, args: Record<string, unknown>): any };
-const BOOK_COLS = "id,title,slug,description,tags,publication_status,access_level,deleted_at";
+const BOOK_COLS = "id,title,slug,description,tags,publication_status,access_level,deleted_at,updated_at";
 const STEP_COLS = "id,phase_id,title,position,content,updated_at";
 function must<T>(r: { data: T; error: unknown }): T {
   if (r.error) throw new StoreError("BACKEND"); // never forward the backend's message
@@ -760,6 +845,17 @@ export function createInsforgeStore(db: DbLike, retry: AppendRetryOptions = {}):
       const rows = must(await db.from("steps").update(patch).eq("id", stepId).eq("updated_at", expected).select(STEP_COLS)) as StepRow[];
       return rows[0] ?? null; // zero rows: somebody changed the step between our read and write
     },
+    async insertBook(b) {
+      const r = await db.from("books").insert([{
+        title: b.title, slug: b.slug, description: b.description, tags: b.tags, difficulty: b.difficulty, cover_url: b.coverUrl,
+        publication_status: "DRAFT", access_level: "PUBLIC", estimated_read_time: 60, created_by: b.createdBy,
+      }]).select(BOOK_COLS).single();
+      return must(r) as BookRow;
+    },
+    async updateBookCas(bookId, expected, patch) {
+      const rows = must(await db.from("books").update(patch).eq("id", bookId).eq("updated_at", expected).is("deleted_at", null).select(BOOK_COLS)) as BookRow[];
+      return rows[0] ?? null;
+    },
     async rateTake(tokenId, bucket, limit, windowSeconds) {
       if (!db.rpc) throw new StoreError("BACKEND");
       const allowed = must(await db.rpc("mcp_rate_take", { p_token: tokenId, p_bucket: bucket, p_limit: limit, p_window_seconds: windowSeconds }));
@@ -776,9 +872,19 @@ export function createInsforgeStore(db: DbLike, retry: AppendRetryOptions = {}):
 // DEVBOOK_MCP_DURABLE_LIMITS=true / DEVBOOK_MCP_DURABLE_AUDIT=true use the shared limit and audit tables of sql/002_mcp_ops.sql
 // (default OFF, so the function keeps working before that migration exists).
 let cached: Deps | null = null;
-function publicOrigin(env: { get(name: string): string | undefined }): string | null {
-  const o = (env.get("DEVBOOK_PUBLIC_ORIGIN") ?? "").replace(/\/+$/, "");
-  return /^https?:\/\/[^/"\s]+$/.test(o) ? o : null;
+// DEVBOOK_PUBLIC_ORIGINS: comma list of website origins, first = default
+// (e.g. "https://devbook-45.vercel.app,https://devbook.rohith.engineer"). DEVBOOK_PUBLIC_ORIGIN (one origin) is read if unset.
+export function parseOrigins(raw: string | undefined): string[] {
+  return (raw ?? "").split(",").map((o) => o.trim().replace(/\/+$/, "")).filter((o) => /^https?:\/\/[^/"\s,]+$/.test(o));
+}
+// The allowlisted origin whose host matches the proxy hint, else the default. Never returns anything outside the list.
+export function pickOrigin(origins: string[], hostHint: string | null): string | null {
+  if (hostHint) {
+    const h = hostHint.toLowerCase();
+    const hit = origins.find((o) => { try { return new URL(o).host === h; } catch { return false; } });
+    if (hit) return hit;
+  }
+  return origins[0] ?? null;
 }
 export function depsFromEnv(env: { get(name: string): string | undefined } = Deno.env): Deps {
   if (cached) return cached;
@@ -797,8 +903,8 @@ export function depsFromEnv(env: { get(name: string): string | undefined } = Den
     limiter: new RateLimiter(now),
     durableLimits: env.get("DEVBOOK_MCP_DURABLE_LIMITS") === "true", // needs sql/002_mcp_ops.sql
     durableAudit: env.get("DEVBOOK_MCP_DURABLE_AUDIT") === "true", // needs sql/002_mcp_ops.sql
-    // DEVBOOK_PUBLIC_ORIGIN: the website that proxies /mcp and /.well-known/* (devbook-oauth); needs sql/003_mcp_oauth.sql
-    resourceMetadataUrl: publicOrigin(env) ? `${publicOrigin(env)}/.well-known/oauth-protected-resource/mcp` : null,
+    // websites that proxy /mcp and /.well-known/* (devbook-oauth); needs sql/003_mcp_oauth.sql
+    publicOrigins: parseOrigins(env.get("DEVBOOK_PUBLIC_ORIGINS") ?? env.get("DEVBOOK_PUBLIC_ORIGIN")),
   };
   return cached;
 }

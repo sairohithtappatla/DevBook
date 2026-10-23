@@ -1,6 +1,6 @@
 # DevBook MCP server (local implementation, NOT deployed)
 
-One Edge Function file, `handler.ts`: stateless Streamable HTTP MCP (official SDK 1.32.1, fresh server per request), personal access tokens, a service-side `Store`, 6 read tools, 4 draft tools and a 2-phase single-step `publish_draft`.
+One Edge Function file, `handler.ts`: stateless Streamable HTTP MCP (official SDK 1.32.1, fresh server per request), personal access tokens, a service-side `Store`, 6 read tools, 5 draft tools (including `create_book`) and two 2-phase publishing tools (`publish_draft` for one step, `publish_book` for a book).
 
 **Status (2026-10-20):** deployed and exercised on the InsForge TEST project `devbook-rls-test` by Antigravity on 2026-10-19 **[recorded]** (read tools, then write and publish, flags switched OFF again): A9 (service credential and `mcp_tokens`), A10 (secrets, URL `https://<app_key>.function2.insforge.app/<slug>`) and A16 (`npm:` imports resolve, cold start ~4 s) confirmed; A15 (rate limiter) UNVERIFIED. The 2026-10-20 review changes below are local only and have not been redeployed. Not deployed to production.
 
@@ -25,7 +25,8 @@ One Edge Function file, `handler.ts`: stateless Streamable HTTP MCP (official SD
 - No protection for unauthenticated floods beyond platform limits: each request with a well-formed token costs one lookup.
 - The browser editor does not check revisions: an open editor tab can overwrite an MCP draft on its next autosave. Tool results say so.
 - `updated_by` stays NULL on MCP edits (the audit trigger uses `auth.uid()`); `created_by` is set explicitly on inserts. Our audit log carries the user id. [A]
-- Not in v1: delete, reorder, book create/update/publish/visibility, attachments, raw SQL, OAuth (ChatGPT/claude.ai without header support need it; `Principal` is the stable interface), `create_chapter`.
+- Books: `create_book` (draft scope; a DRAFT book you own, same shape as the website's New book) and `publish_book` (publish scope, OWNER only, two-phase confirmation bound to user, token, book, revision and access level; PUBLIC or UNLISTED). OAuth ("Connect DevBook") lives in `../devbook-oauth`.
+- Not available: delete, reorder, book metadata edits, unpublishing, attachments, raw SQL, `create_chapter`.
 
 ## Files
 `handler.ts` (deployable), `sql/001_mcp_tokens.sql` + `sql/001_rollback.sql` (proposal, not applied), `tests/*`, `deno.json`, `../tools/mcp-token.mjs` (+ test: mints a token, prints only its hash as SQL).

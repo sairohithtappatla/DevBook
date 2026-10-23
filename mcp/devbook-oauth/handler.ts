@@ -12,7 +12,7 @@
 //   GET  /.well-known/oauth-protected-resource[/mcp]
 //   POST /register
 //   POST /token
-// Public URLs come from DEVBOOK_PUBLIC_ORIGIN (the website origin that proxies /mcp, /oauth/* and /.well-known/* here).
+// Public URLs come from DEVBOOK_PUBLIC_ORIGINS (the website origins that proxy /mcp, /oauth/* and /.well-known/* here).
 // Only hashes of codes and tokens are stored (sql/003_mcp_oauth.sql). Tokens and codes never appear in logs.
 import { createAdminClient } from "npm:@insforge/sdk@1.5.2";
 
@@ -23,11 +23,25 @@ const MAX_BODY_BYTES = 16 * 1024;
 
 export type RpcResult = { data: unknown; error: unknown };
 export type OAuthDeps = {
-  origin: string; // e.g. https://devbook.rohith.engineer (no trailing slash)
+  // website origins that proxy this function, first = default (no trailing slash). A request is answered for the origin
+  // it came through (origin_host query parameter added by the proxy) when that origin is listed, else for the default.
+  origins: string[];
   rpc(fn: string, args: Record<string, unknown>): Promise<RpcResult>;
   randomBytes(n: number): Uint8Array;
   log(line: string): void;
 };
+
+export function parseOrigins(raw: string | undefined): string[] {
+  return (raw ?? "").split(",").map((o) => o.trim().replace(/\/+$/, "")).filter((o) => /^https?:\/\/[^/"\s,]+$/.test(o));
+}
+export function pickOrigin(origins: string[], hostHint: string | null): string | null {
+  if (hostHint) {
+    const h = hostHint.toLowerCase();
+    const hit = origins.find((o) => { try { return new URL(o).host === h; } catch { return false; } });
+    if (hit) return hit;
+  }
+  return origins[0] ?? null;
+}
 
 // ------------------------------------------------------------------------------------------------ encoding helpers
 export function b64url(bytes: Uint8Array): string {
@@ -241,7 +255,7 @@ async function handleToken(deps: OAuthDeps, req: Request): Promise<Response> {
     if (!CODE_RE.test(p.code ?? "")) return oauthError(400, "invalid_grant", "authorization code is invalid, expired or already used");
     if (!VERIFIER_RE.test(p.code_verifier ?? "")) return oauthError(400, "invalid_request", "code_verifier (PKCE) is required");
     if (typeof p.redirect_uri !== "string" || p.redirect_uri.length === 0 || p.redirect_uri.length > 2000) return oauthError(400, "invalid_request", "redirect_uri is required");
-    if (p.resource !== undefined && normalizeResource(p.resource) !== `${deps.origin}/mcp`) return oauthError(400, "invalid_target", "unknown resource");
+    if (p.resource !== undefined && !deps.origins.some((o) => normalizeResource(p.resource as string) === `${o}/mcp`)) return oauthError(400, "invalid_target", "unknown resource");
     const access = newAccessToken(deps), refresh = newRefreshToken(deps);
     const r = await deps.rpc("mcp_oauth_exchange_code", {
       p_code_hash: await sha256Hex(p.code as string), p_client_id: clientId, p_redirect_uri: p.redirect_uri,
@@ -279,12 +293,16 @@ export function createOAuthHandler(getDeps: () => OAuthDeps): (req: Request) => 
       if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
       let deps: OAuthDeps;
       try { deps = getDeps(); } catch { return oauthError(503, "temporarily_unavailable", "service is not configured"); }
-      const path = new URL(req.url).pathname.replace(/\/+$/, "");
+      const url = new URL(req.url);
+      const path = url.pathname.replace(/\/+$/, "");
+      // the website the client came through (proxy hint), else the default origin; only allowlisted origins are used
+      const origin = pickOrigin(deps.origins, url.searchParams.get("origin_host"));
+      if (!origin) return oauthError(503, "temporarily_unavailable", "service is not configured");
       if (req.method === "GET" && path.endsWith("/.well-known/oauth-authorization-server")) {
-        return json(200, authorizationServerMetadata(deps.origin), { "cache-control": "public, max-age=300" });
+        return json(200, authorizationServerMetadata(origin), { "cache-control": "public, max-age=300", vary: "origin_host" });
       }
       if (req.method === "GET" && (path.endsWith("/.well-known/oauth-protected-resource") || path.endsWith("/.well-known/oauth-protected-resource/mcp"))) {
-        return json(200, protectedResourceMetadata(deps.origin), { "cache-control": "public, max-age=300" });
+        return json(200, protectedResourceMetadata(origin), { "cache-control": "public, max-age=300", vary: "origin_host" });
       }
       if (path.endsWith("/register")) {
         if (req.method !== "POST") return json(405, { error: "method_not_allowed" }, { allow: "POST" });
@@ -304,16 +322,17 @@ export function createOAuthHandler(getDeps: () => OAuthDeps): (req: Request) => 
 
 // ------------------------------------------------------------------------------------------------ production wiring
 // Secrets: INSFORGE_BASE_URL (platform), DEVBOOK_MCP_API_KEY (service credential, shared with devbook-mcp),
-// DEVBOOK_PUBLIC_ORIGIN (website origin, e.g. https://devbook.rohith.engineer).
+// DEVBOOK_PUBLIC_ORIGINS (comma list of website origins, first = default, e.g.
+// "https://devbook-45.vercel.app,https://devbook.rohith.engineer"); DEVBOOK_PUBLIC_ORIGIN (one origin) is read if unset.
 let cached: OAuthDeps | null = null;
 export function depsFromEnv(env: { get(name: string): string | undefined } = Deno.env): OAuthDeps {
   if (cached) return cached;
   const baseUrl = env.get("INSFORGE_BASE_URL"), apiKey = env.get("DEVBOOK_MCP_API_KEY");
-  const origin = (env.get("DEVBOOK_PUBLIC_ORIGIN") ?? "").replace(/\/+$/, "");
-  if (!baseUrl || !apiKey || !/^https?:\/\/[^/]+$/.test(origin)) throw new Error("not configured");
+  const origins = parseOrigins(env.get("DEVBOOK_PUBLIC_ORIGINS") ?? env.get("DEVBOOK_PUBLIC_ORIGIN"));
+  if (!baseUrl || !apiKey || origins.length === 0) throw new Error("not configured");
   const db = createAdminClient({ baseUrl, apiKey }).database;
   cached = {
-    origin,
+    origins,
     rpc: async (fn, args) => { const r = await db.rpc(fn, args); return { data: r.data, error: r.error }; },
     randomBytes: (n) => crypto.getRandomValues(new Uint8Array(n)),
     log: (line) => console.log(line),

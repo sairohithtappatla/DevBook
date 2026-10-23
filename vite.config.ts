@@ -5,13 +5,15 @@ import path from 'node:path'
 
 // Dev only: the same routes vercel.json proxies in production, so "Connect DevBook" (OAuth) and /mcp can be tested
 // locally against a non-production InsForge project. Set DEVBOOK_FUNCTIONS_ORIGIN (e.g. https://<appkey>.function2.insforge.app)
-// in your local env to enable it; that project's DEVBOOK_PUBLIC_ORIGIN secret must then be http://localhost:5173.
+// in your local env to enable it; that project's DEVBOOK_PUBLIC_ORIGINS secret must then include http://localhost:5173.
 function functionProxy(functionsOrigin: string): Record<string, ProxyOptions> {
   const to = (target: string): ProxyOptions => ({ target: functionsOrigin, changeOrigin: true, rewrite: () => target })
+  // origin_host tells the functions which website the request came through (as vercel.json does in production)
+  const site = '?origin_host=localhost:5173'
   return {
-    '^/mcp$': to('/devbook-mcp'),
-    '^/\\.well-known/oauth-protected-resource(/mcp)?$': to('/devbook-oauth/.well-known/oauth-protected-resource'),
-    '^/\\.well-known/oauth-authorization-server$': to('/devbook-oauth/.well-known/oauth-authorization-server'),
+    '^/mcp$': to(`/devbook-mcp${site}`),
+    '^/\\.well-known/oauth-protected-resource(/mcp)?$': to(`/devbook-oauth/.well-known/oauth-protected-resource${site}`),
+    '^/\\.well-known/oauth-authorization-server$': to(`/devbook-oauth/.well-known/oauth-authorization-server${site}`),
     '^/oauth/token$': to('/devbook-oauth/token'),
     '^/oauth/register$': to('/devbook-oauth/register'),
   }

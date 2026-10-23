@@ -111,3 +111,12 @@ All 26 evidence items are accounted for with explicit justifications and limitat
 | EVD-55 | Website | `f4ba1a2` on v2 and main; Vercel Git build success; live bundle contains consent + settings code, production backend only | PROD | PASS |
 | EVD-56 | Public checks through the domain | 14/14: `/mcp` 401 + resource_metadata, both metadata documents, CORS preflight, registration (valid/invalid), token endpoint refusal, `/oauth/authorize` + `/settings`, personal token through `/mcp`, anonymous denied on the new functions; test client deleted | PROD | PASS |
 | EVD-57 | Real client connection (ChatGPT / Claude / Cursor) and the consent + Settings screens in a browser | needs the owner in a browser | PROD | NOT TESTED |
+
+## Update 2026-10-23 (Claude Code) — MCP book tools and multi-domain sign-in
+| ID | Control | Verification | Where | Status |
+|---|---|---|---|---|
+| EVD-58 | create_book / publish_book (unit) | `handler.test.ts` 43/43: DRAFT book owned by caller, title idempotency, no creating for others, owner-only publish, publish scope, confirmation bound to user/token/operation/book/revision/access level, expiry, empty-book warning; tool counts 6/11/13 | local Deno | PASS |
+| EVD-59 | Book tools on the real database | `mcp/tools/book-tools-verify.mjs` 19/19: stored row = website shape, OWNER row by trigger, DRAFT invisible to anon, step publish alone keeps book invisible, UNLISTED opens by link and is not listed, PUBLIC listed, published_at set; TEST flags restored to false; book/user/tokens cleaned | TEST | PASS |
+| EVD-60 | Multi-origin discovery | MCP + OAuth unit tests (origin hint selects a listed origin, anything else falls back to the default); TEST functions confirmed; OAuth e2e regression 65/65 | local + TEST | PASS |
+| EVD-61 | Production functions | `DEVBOOK_PUBLIC_ORIGINS="https://devbook.rohith.engineer,https://devbook-45.vercel.app"` (custom domain first until the vercel.json host hints are live); both functions redeployed, sources identical; existing token lists create_book + publish_book; rohith.engineer discovery unchanged | PROD | PASS |
+| EVD-62 | vercel.json host hints (`origin_host=:host`) + Vite proxy hint | committed locally, NOT pushed; sign-in through devbook-45.vercel.app/mcp needs the push, then the origins list is reordered to vercel.app first | — | PENDING |

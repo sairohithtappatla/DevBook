@@ -8,6 +8,7 @@ import {
 } from "../handler.ts";
 
 const ORIGIN = "https://devbook.example";
+const ALT = "https://alt.example";
 type Code = { client_id: string; redirect_uri: string; challenge: string; scopes: string[]; used: boolean; grant: string | null; expired: boolean };
 type Grant = { client_id: string; scopes: string[]; revoked: boolean };
 
@@ -73,7 +74,7 @@ function fakeDb() {
 function setup() {
   const db = fakeDb();
   const logs: string[] = [];
-  const deps: OAuthDeps = { origin: ORIGIN, rpc: db.rpc, randomBytes: (k) => crypto.getRandomValues(new Uint8Array(k)), log: (l) => logs.push(l) };
+  const deps: OAuthDeps = { origins: [ORIGIN, ALT], rpc: db.rpc, randomBytes: (k) => crypto.getRandomValues(new Uint8Array(k)), log: (l) => logs.push(l) };
   return { db, logs, handler: createOAuthHandler(() => deps) };
 }
 const form = (o: Record<string, string>) => new URLSearchParams(o).toString();
@@ -301,5 +302,28 @@ Deno.test("registration: validateRegistration defaults the name and drops non-ht
     assertEquals(v.value.client_name, "MCP client");
     assertEquals(v.value.client_uri, null);
     assertEquals(v.value.redirect_uris, ["https://a.example/cb"]);
+  }
+});
+
+// ---------------------------------------------------------------- several website origins (custom domain + vercel.app)
+Deno.test("origins: metadata follows the website the client came through; unknown or missing hints use the default", async () => {
+  const { handler } = setup();
+  const get = async (q: string) => await (await handler(new Request(`https://fn.internal/.well-known/oauth-authorization-server${q}`))).json();
+  assertEquals((await get("")).issuer, ORIGIN);
+  assertEquals((await get("?origin_host=alt.example")).issuer, ALT);
+  assertEquals((await get("?origin_host=ALT.EXAMPLE")).issuer, ALT);
+  assertEquals((await get("?origin_host=evil.example")).issuer, ORIGIN, "never an origin outside the list");
+  const prm = await (await handler(new Request("https://fn.internal/.well-known/oauth-protected-resource/mcp?origin_host=alt.example"))).json();
+  assertEquals(prm.resource, `${ALT}/mcp`);
+  assertEquals(prm.authorization_servers, [ALT]);
+});
+Deno.test("origins: the token endpoint accepts the /mcp resource of every listed origin and nothing else", async () => {
+  const { handler, db } = setup();
+  const c = await register(handler);
+  for (const [resource, expectOk] of [[`${ALT}/mcp`, true], [`${ORIGIN}/mcp`, true], ["https://evil.example/mcp", false]] as const) {
+    const { verifier, challenge } = await pkce();
+    const code = await db.issueCode(c.client_id, "https://client.example/callback", challenge, ["read"]);
+    const r = await handler(post("/token", form({ grant_type: "authorization_code", code, redirect_uri: "https://client.example/callback", client_id: c.client_id, code_verifier: verifier, resource })));
+    assertEquals(r.status === 200, expectOk, resource);
   }
 });

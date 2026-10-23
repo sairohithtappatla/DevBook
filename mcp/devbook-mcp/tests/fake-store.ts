@@ -1,5 +1,5 @@
 // In-memory Store written independently of createInsforgeStore (plain arrays, trigger-like updated_at).
-import type { BookRow, MemberBook, PhaseRow, Role, Store, StepContent, StepRow, TokenRow } from "../handler.ts";
+import type { BookRow, MemberBook, NewBook, PhaseRow, Role, Store, StepContent, StepRow, TokenRow } from "../handler.ts";
 import { StoreError } from "../handler.ts";
 
 export class FakeStore implements Store {
@@ -21,7 +21,7 @@ export class FakeStore implements Store {
   private check() { if (this.failWith) throw this.failWith; }
   addToken(hash: string, row: TokenRow) { this.tokenHashes.set(hash, row); }
   addBook(b: Partial<BookRow> & { id: string }, members: [string, Role][]): void {
-    this.books.push({ title: b.id, slug: b.id, description: null, tags: [], publication_status: "PUBLISHED", access_level: "PUBLIC", deleted_at: null, ...b });
+    this.books.push({ title: b.id, slug: b.id, description: null, tags: [], publication_status: "PUBLISHED", access_level: "PUBLIC", deleted_at: null, updated_at: this.tick(), ...b });
     for (const [u, r] of members) this.members.push({ book_id: b.id, user_id: u, role: r });
   }
   addPhase(id: string, book_id: string, title: string, position = 1) { this.phases.push({ id, book_id, title, position }); }
@@ -50,6 +50,28 @@ export class FakeStore implements Store {
     const position = Math.max(0, ...this.steps.filter((s) => s.phase_id === phaseId).map((s) => s.position)) + 1;
     const s: StepRow = { id: crypto.randomUUID(), phase_id: phaseId, title, position, content: structuredClone(content), updated_at: this.tick() }; this.steps.push(s); return structuredClone(s);
   }
+  bookExtras = new Map<string, { difficulty: string; cover_url: string; created_by: string; published_at?: string }>();
+  async insertBook(b: NewBook) {
+    this.check();
+    const row: BookRow = { id: crypto.randomUUID(), title: b.title, slug: b.slug, description: b.description, tags: b.tags, publication_status: "DRAFT", access_level: "PUBLIC", deleted_at: null, updated_at: this.tick() };
+    this.books.push(row);
+    this.bookExtras.set(row.id, { difficulty: b.difficulty, cover_url: b.coverUrl, created_by: b.createdBy });
+    this.members.push({ book_id: row.id, user_id: b.createdBy, role: "OWNER" }); // trigger_add_book_owner
+    return structuredClone(row);
+  }
+  beforeBookCas: (() => void) | null = null;
+  async updateBookCas(bookId: string, expected: string, patch: { publication_status?: "PUBLISHED"; access_level?: "PUBLIC" | "UNLISTED"; published_at?: string }) {
+    this.check();
+    this.beforeBookCas?.();
+    const b = this.books.find((x) => x.id === bookId && x.deleted_at === null);
+    if (!b || b.updated_at !== expected) return null;
+    if (patch.publication_status) b.publication_status = patch.publication_status;
+    if (patch.access_level) b.access_level = patch.access_level;
+    if (patch.published_at) this.bookExtras.set(b.id, { ...(this.bookExtras.get(b.id) ?? { difficulty: "", cover_url: "", created_by: "" }), published_at: patch.published_at });
+    b.updated_at = this.tick();
+    return structuredClone(b);
+  }
+  touchBook(id: string) { const b = this.books.find((x) => x.id === id)!; b.updated_at = this.tick(); }
   async updateStepCas(stepId: string, expected: string, patch: { title?: string; content?: StepContent }) {
     this.check(); this.casCalls++;
     this.beforeCas?.();
