@@ -101,3 +101,13 @@ All 26 evidence items are accounted for with explicit justifications and limitat
 | EVD-49 | Website proxy | Vite dev proxy to TEST: `/mcp` 401 + header, both metadata documents, `/oauth/register`, `/oauth/token` reach the functions; `/oauth/authorize`, `/settings` serve the app | local + TEST | PASS |
 | EVD-50 | Frontend logic | `mcp-connect.test.ts` 9/9; tsc clean; oxlint 0 warnings in src; build OK; all earlier suites pass | local | PASS |
 | EVD-51 | Consent page and Settings UI in a browser | not performed by Claude Code (no browser); real clients (ChatGPT/Claude/Cursor) need the public HTTPS deployment | — | NOT TESTED |
+
+## Update 2026-10-23 (Claude Code) — "Connect DevBook" on PRODUCTION (`6ktij8hk`)
+| ID | Control | Verification | Where | Status |
+|---|---|---|---|---|
+| EVD-52 | Backup | new manual backup refused (quota 1/1); existing `c6ce979c…` kept; owner approved proceeding; 003 is additive with `003_rollback.sql` | PROD | ACCEPTED RISK |
+| EVD-53 | Migration 003 | `20261023121657_mcp-oauth` applied; function privileges identical to TEST; 4 new tables RLS on; existing token still active | PROD | PASS |
+| EVD-54 | Functions | `DEVBOOK_PUBLIC_ORIGIN=https://devbook.rohith.engineer`; `devbook-oauth` created, `devbook-mcp` redeployed; both deployed sources identical to the repo files | PROD | PASS |
+| EVD-55 | Website | `f4ba1a2` on v2 and main; Vercel Git build success; live bundle contains consent + settings code, production backend only | PROD | PASS |
+| EVD-56 | Public checks through the domain | 14/14: `/mcp` 401 + resource_metadata, both metadata documents, CORS preflight, registration (valid/invalid), token endpoint refusal, `/oauth/authorize` + `/settings`, personal token through `/mcp`, anonymous denied on the new functions; test client deleted | PROD | PASS |
+| EVD-57 | Real client connection (ChatGPT / Claude / Cursor) and the consent + Settings screens in a browser | needs the owner in a browser | PROD | NOT TESTED |
