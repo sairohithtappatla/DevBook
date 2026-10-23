@@ -47,7 +47,7 @@ functions (`vercel.json` in production, the Vite dev proxy locally). `/oauth/aut
 
 ### Several domains
 Each website domain is a complete, independent entry point: `https://<domain>/mcp`. The proxy adds `origin_host=<domain>`
-(vercel.json `has` host capture), and both functions answer with that domain's metadata when it is in the list, otherwise
+(one vercel.json rule per domain; add a rule set when adding a domain), and both functions answer with that domain's metadata when it is in the list, otherwise
 with the default (first) origin. Tokens work through every domain. If a domain goes away (for example an expired custom
 domain), connections made through it stop refreshing; reconnect with `https://devbook-45.vercel.app/mcp` and remove the
 domain from the list. Nothing else changes.
