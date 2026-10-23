@@ -1,5 +1,11 @@
 {
   "rewrites": [
+    { "source": "/mcp", "destination": "https://6ktij8hk.function2.insforge.app/devbook-mcp" },
+    { "source": "/.well-known/oauth-protected-resource", "destination": "https://6ktij8hk.function2.insforge.app/devbook-oauth/.well-known/oauth-protected-resource" },
+    { "source": "/.well-known/oauth-protected-resource/mcp", "destination": "https://6ktij8hk.function2.insforge.app/devbook-oauth/.well-known/oauth-protected-resource/mcp" },
+    { "source": "/.well-known/oauth-authorization-server", "destination": "https://6ktij8hk.function2.insforge.app/devbook-oauth/.well-known/oauth-authorization-server" },
+    { "source": "/oauth/token", "destination": "https://6ktij8hk.function2.insforge.app/devbook-oauth/token" },
+    { "source": "/oauth/register", "destination": "https://6ktij8hk.function2.insforge.app/devbook-oauth/register" },
     {
       "source": "/(.*)",
       "destination": "/index.html"

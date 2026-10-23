@@ -1,5 +1,5 @@
 import { Menu, Search, Sun, Moon } from "lucide-react";
-import { useSearch } from "@/providers/SearchProvider";
+import { useSearch } from "@/hooks/useSearch";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/stores/theme";
 

@@ -99,7 +99,7 @@ function mapDBBookToBookData(dbBook: any, stepCounts?: Record<string, number>): 
         username = parsed.username;
       }
     }
-  } catch (e) {
+  } catch {
     // Ignore
   }
 
@@ -155,7 +155,7 @@ export function ProfilePage() {
         socials = { ...fallbackSocials, ...(parsed.socials || {}) };
         username = parsed.username || username;
       }
-    } catch (e) {
+    } catch {
       // Ignore
     }
 

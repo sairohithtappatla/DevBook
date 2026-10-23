@@ -6,7 +6,7 @@ const rules = [
   [/\b(ik_|uak_|dbk_|sk-|sk_live_|sk_test_)[A-Za-z0-9._-]{6,}/g, "$1[REDACTED]"],
   [/eyJ[A-Za-z0-9._-]{20,}/g, "[JWT-REDACTED]"],
   [/postgres(?:ql)?:\/\/[^\s"']+/gi, "postgres://[REDACTED]"],
-  [/\bBearer\s+[A-Za-z0-9._~+\/=-]{8,}/gi, "Bearer [REDACTED]"],
+  [/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, "Bearer [REDACTED]"],
   [/((?:password|passwd|secret|token|api[_-]?key|anon[_-]?key|authorization)["']?\s*[:=]\s*["']?)[^\s,"'}]+/gi, "$1[REDACTED]"],
 ];
 import { readFileSync } from "node:fs";

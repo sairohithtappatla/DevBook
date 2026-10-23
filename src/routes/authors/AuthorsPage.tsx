@@ -27,7 +27,7 @@ export function AuthorsPage() {
         const parsed = JSON.parse(dbProfile.bio);
         username = parsed.username || username;
       }
-    } catch (e) {
+    } catch {
       // Ignore
     }
     return username;

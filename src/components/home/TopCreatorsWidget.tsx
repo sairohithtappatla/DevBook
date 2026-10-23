@@ -31,7 +31,7 @@ export function TopCreatorsWidget({ className = "" }: TopCreatorsWidgetProps) {
             username = parsed.username;
           }
         }
-      } catch (e) {
+      } catch {
         // Ignore
       }
 

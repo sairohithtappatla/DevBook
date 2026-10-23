@@ -25,7 +25,7 @@ function mapDBBookToBookData(dbBook: any, stepCounts?: Record<string, number>): 
         username = parsed.username;
       }
     }
-  } catch (e) {
+  } catch {
     // Ignore
   }
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/stores/theme";
-import { Home, Compass, BookOpen, BarChart3, User, LogOut, Users } from "lucide-react";
+import { Home, Compass, BookOpen, BarChart3, User, LogOut, Users, Settings } from "lucide-react";
 
 type NavigationItem = {
   name: string;
@@ -16,6 +16,7 @@ const navigation: NavigationItem[] = [
   { name: "My Progress", tabId: "progress", icon: BarChart3 },
   { name: "Authors", tabId: "authors", icon: Users },
   { name: "My Profile", tabId: "profile", icon: User },
+  { name: "Settings", tabId: "settings", icon: Settings },
 ];
 
 type SidebarProps = {

@@ -106,7 +106,7 @@ function BookThumb({ type }: { type: string }) {
   );
 }
 
-export function getCategoryLabel(type: string): string {
+function getCategoryLabel(type: string): string {
   const key = (type || "").toLowerCase();
   if (key.includes("docker") || key.includes("devops")) return "DevOps";
   if (key.includes("database") || key.includes("postgres") || key.includes("databases")) return "Databases";

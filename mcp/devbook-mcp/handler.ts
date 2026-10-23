@@ -77,6 +77,7 @@ export type Deps = {
   limiter: RateLimiter;
   durableLimits?: boolean; // DEVBOOK_MCP_DURABLE_LIMITS=true: also enforce the shared per-token limits of store.rateTake
   durableAudit?: boolean; // DEVBOOK_MCP_DURABLE_AUDIT=true: also store write/publish calls via store.recordAudit
+  resourceMetadataUrl?: string | null; // OAuth discovery (RFC 9728): advertised in the 401 so clients can start "Connect DevBook"
 };
 
 // ------------------------------------------------------------------------------------------------ constants
@@ -653,7 +654,10 @@ async function handleRequest(getDeps: () => Deps | Promise<Deps>, req: Request, 
     }
     if (!principal) {
       writeAudit(deps, { event: "auth", requestId, outcome: "UNAUTHENTICATED" });
-      return jsonRpcError(401, -32001, "Unauthorized.", { "www-authenticate": 'Bearer realm="devbook-mcp"' });
+      const challenge = deps.resourceMetadataUrl
+        ? `Bearer realm="devbook-mcp", resource_metadata="${deps.resourceMetadataUrl}"`
+        : 'Bearer realm="devbook-mcp"';
+      return jsonRpcError(401, -32001, "Unauthorized.", { "www-authenticate": challenge, "access-control-expose-headers": "www-authenticate" });
     }
 
     if (!(req.headers.get("content-type") ?? "").toLowerCase().startsWith("application/json")) return jsonRpcError(415, -32000, "Content-Type must be application/json.");
@@ -772,6 +776,10 @@ export function createInsforgeStore(db: DbLike, retry: AppendRetryOptions = {}):
 // DEVBOOK_MCP_DURABLE_LIMITS=true / DEVBOOK_MCP_DURABLE_AUDIT=true use the shared limit and audit tables of sql/002_mcp_ops.sql
 // (default OFF, so the function keeps working before that migration exists).
 let cached: Deps | null = null;
+function publicOrigin(env: { get(name: string): string | undefined }): string | null {
+  const o = (env.get("DEVBOOK_PUBLIC_ORIGIN") ?? "").replace(/\/+$/, "");
+  return /^https?:\/\/[^/"\s]+$/.test(o) ? o : null;
+}
 export function depsFromEnv(env: { get(name: string): string | undefined } = Deno.env): Deps {
   if (cached) return cached;
   const baseUrl = env.get("INSFORGE_BASE_URL"), apiKey = env.get("DEVBOOK_MCP_API_KEY");
@@ -789,6 +797,8 @@ export function depsFromEnv(env: { get(name: string): string | undefined } = Den
     limiter: new RateLimiter(now),
     durableLimits: env.get("DEVBOOK_MCP_DURABLE_LIMITS") === "true", // needs sql/002_mcp_ops.sql
     durableAudit: env.get("DEVBOOK_MCP_DURABLE_AUDIT") === "true", // needs sql/002_mcp_ops.sql
+    // DEVBOOK_PUBLIC_ORIGIN: the website that proxies /mcp and /.well-known/* (devbook-oauth); needs sql/003_mcp_oauth.sql
+    resourceMetadataUrl: publicOrigin(env) ? `${publicOrigin(env)}/.well-known/oauth-protected-resource/mcp` : null,
   };
   return cached;
 }

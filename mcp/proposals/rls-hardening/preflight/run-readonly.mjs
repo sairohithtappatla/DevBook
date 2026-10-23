@@ -24,7 +24,7 @@ export function splitStatements(text) {
   return out.filter((s) => s.sql);
 }
 const FORBIDDEN = /\b(insert|update|delete|drop|alter|create|grant|revoke|truncate|call|do|copy|set|reset|vacuum|lock|listen|notify|execute|prepare|comment|security|refresh|reindex|cluster|import|merge|pg_read_file|pg_ls_dir|lo_import|lo_export|dblink|set_config|pg_terminate_backend|pg_cancel_backend|nextval|setval)\b/i;
-const SHELL = /["`$%!^&|<>\;]/;
+const SHELL = /["`$%!^&|<>;]/;
 export function check(stmt) {
   const s = stmt.sql;
   if (!/^(select|with|show)\b/i.test(s)) return "must start with SELECT/WITH/SHOW";

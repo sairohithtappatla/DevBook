@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "@tanstack/react-router";
+import { takeOAuthReturn } from "@/lib/mcp-connect";
 
 type GuardProps = {
   children: ReactNode;
@@ -37,7 +38,10 @@ export function PublicRoute({ children }: GuardProps) {
 
   useEffect(() => {
     if (isAuthenticated && isEmailVerified) {
-      navigate({ to: "/home" });
+      // Signed in from the "Connect DevBook" consent page: go back there (full load, it reads its own query string)
+      const oauthReturn = takeOAuthReturn();
+      if (oauthReturn) window.location.replace(oauthReturn);
+      else navigate({ to: "/home" });
     }
   }, [isAuthenticated, isEmailVerified, navigate]);
 

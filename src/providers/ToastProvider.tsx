@@ -1,19 +1,12 @@
-import React, { createContext, useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import { CheckCircle, AlertTriangle, AlertCircle, Info, X } from "lucide-react";
-
-type ToastType = "success" | "info" | "warning" | "error";
+import { ToastContext, type ToastType } from "@/providers/toast-context";
 
 type Toast = {
   id: string;
   message: string;
   type: ToastType;
 };
-
-type ToastContextType = {
-  showToast: (message: string, type?: ToastType) => void;
-};
-
-export const ToastContext = createContext<ToastContextType | undefined>(undefined);
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);

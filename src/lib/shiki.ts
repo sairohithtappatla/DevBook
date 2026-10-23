@@ -50,7 +50,7 @@ export function highlightCodeSync(code: string, lang: string, theme: "light" | "
         lang,
         theme: theme === "light" ? "github-light" : "one-dark-pro"
       });
-    } catch (e) {
+    } catch {
       // Fallback below
     }
   } else {

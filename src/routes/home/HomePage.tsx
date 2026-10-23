@@ -5,7 +5,7 @@ import { Section } from "@/components/ui/Section";
 import { HeroSection } from "@/components/home/HeroSection";
 import type { BookData } from "@/components/books/BookCard";
 import { BookCard } from "@/components/books/BookCard";
-import { useSearch } from "@/providers/SearchProvider";
+import { useSearch } from "@/hooks/useSearch";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { CategoriesWidget } from "@/components/home/CategoriesWidget";
 import { TopCreatorsWidget } from "@/components/home/TopCreatorsWidget";
@@ -21,7 +21,7 @@ function mapDBBookToBookData(dbBook: any, stepCounts?: Record<string, number>): 
         username = parsed.username;
       }
     }
-  } catch (e) {
+  } catch {
     // Ignore
   }
 

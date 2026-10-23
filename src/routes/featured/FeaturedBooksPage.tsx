@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { BookGrid } from "@/components/books/BookGrid";
 import type { BookData } from "@/components/books/BookCard";
-import { useSearch } from "@/providers/SearchProvider";
+import { useSearch } from "@/hooks/useSearch";
 import { CategoriesWidget } from "@/components/home/CategoriesWidget";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useBooks, useBookStepCounts } from "@/hooks/useBooks";
@@ -16,7 +16,7 @@ function mapDBBookToBookData(dbBook: any, stepCounts?: Record<string, number>): 
         username = parsed.username;
       }
     }
-  } catch (e) {
+  } catch {
     // Ignore
   }
 

@@ -6,7 +6,7 @@ const KEY = "devbook-theme";
 function applyTheme(t: Theme, persist: boolean) {
   if (typeof document === "undefined") return;
   const c = document.documentElement.classList;
-  t === "dark" ? c.add("dark") : c.remove("dark");
+  c.toggle("dark", t === "dark");
   try {
     if (persist) localStorage.setItem(KEY, t);
   } catch {}

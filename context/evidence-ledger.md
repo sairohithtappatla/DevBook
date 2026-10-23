@@ -89,3 +89,15 @@ All 26 evidence items are accounted for with explicit justifications and limitat
 | EVD-42 | routing flow step `e7a376a7…` | hidden in the v2 reader (book shows 0 steps) pending owner republish; 02c not applied | PROD | OPEN (content owner) |
 | EVD-25 | Browser verification (reader, editor UI, console) | not performed by Claude Code; API checks only | PROD | NOT TESTED |
 | EVD-43 | Attachments / storage 09 | out of scope by owner decision; 09 not applied to production | PROD | NOT TESTED |
+
+## Update 2026-10-23 (Claude Code) — "Connect DevBook" (MCP OAuth) and Settings → MCP Connect, TEST project
+| ID | Control | Verification | Where | Status |
+|---|---|---|---|---|
+| EVD-44 | Migration 003 | `20261023061145_mcp-oauth` applied; function privileges read back: browser functions executable by authenticated only, exchange/refresh/register by project_admin only, helpers private | TEST | PASS |
+| EVD-45 | Function sub-path routing | probe function: `/<slug>/x` reaches the function with pathname `/x` (probe deleted) | TEST | PASS |
+| EVD-46 | OAuth function unit tests | `mcp/devbook-oauth/tests/oauth.test.ts` 17/17 (metadata, registration validation, PKCE, single-use codes, rotation, replay revocation, no secrets in logs) | local Deno | PASS |
+| EVD-47 | MCP discovery header | `handler.test.ts` 37/37 incl. RFC 9728 `resource_metadata`; deployed TEST 401 carries it | local + TEST | PASS |
+| EVD-48 | End-to-end flow | `mcp/tools/oauth-flow-verify.mjs` 65/65: discovery → registration → consent functions → token (PKCE) → MCP → refresh rotation → code/refresh replay revocation → disconnect → personal tokens → anon/signed-in privilege denials (401/403 with correct signatures); verification restored to true; users, clients, grants, codes, tokens = 0 afterwards | TEST (real DB + functions) | PASS |
+| EVD-49 | Website proxy | Vite dev proxy to TEST: `/mcp` 401 + header, both metadata documents, `/oauth/register`, `/oauth/token` reach the functions; `/oauth/authorize`, `/settings` serve the app | local + TEST | PASS |
+| EVD-50 | Frontend logic | `mcp-connect.test.ts` 9/9; tsc clean; oxlint 0 warnings in src; build OK; all earlier suites pass | local | PASS |
+| EVD-51 | Consent page and Settings UI in a browser | not performed by Claude Code (no browser); real clients (ChatGPT/Claude/Cursor) need the public HTTPS deployment | — | NOT TESTED |

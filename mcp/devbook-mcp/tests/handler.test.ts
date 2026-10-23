@@ -87,6 +87,14 @@ Deno.test("auth: missing, malformed, unknown, expired, revoked and scope-less to
   const q = await env.handler(new Request(`http://local/mcp?token=${env.tok.owner}`, { method: "POST", headers: H, body: "{}" }));
   assertEquals(q.status, 401);
 });
+Deno.test("auth: with OAuth configured, the 401 points to the protected resource metadata (RFC 9728)", async () => {
+  const env = await setup();
+  env.deps.resourceMetadataUrl = "https://devbook.example/.well-known/oauth-protected-resource/mcp";
+  const r = await rpc(env, null, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } });
+  assertEquals(r.status, 401);
+  assertEquals(r.headers.get("www-authenticate"), 'Bearer realm="devbook-mcp", resource_metadata="https://devbook.example/.well-known/oauth-protected-resource/mcp"');
+  assertEquals(r.headers.get("access-control-expose-headers"), "www-authenticate");
+});
 Deno.test("auth: a valid token authenticates; last_used_at is touched at most every 5 minutes", async () => {
   const env = await setup();
   const touches: string[] = [];

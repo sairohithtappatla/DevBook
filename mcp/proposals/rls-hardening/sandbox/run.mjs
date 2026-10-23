@@ -85,7 +85,6 @@ BOOKS.forEach((b) => { LABEL.set(bookId(b.n), `b${b.n}`); LABEL.set(phaseId(b.n)
 STEPS.forEach((s) => LABEL.set(stepId(s.n, s.k), `s${s.n}${s.k}`));
 ATTS.forEach((a) => LABEL.set(attId(a.n, a.k), `a${a.n}${a.k}`));
 const lab = (id) => LABEL.get(id) ?? id;
-const bookOf = (n) => BOOKS.find((b) => b.n === n);
 
 // ---------------------------------------------------------------- oracle: the approved rules, written independently
 const isMember = (a) => !!a.member;

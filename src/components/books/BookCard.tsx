@@ -54,7 +54,7 @@ function getRelativeTimeString(dateString?: string): string {
     } else {
       return diffYears === 1 ? "1 year ago" : `${diffYears} years ago`;
     }
-  } catch (e) {
+  } catch {
     return "Recently";
   }
 }

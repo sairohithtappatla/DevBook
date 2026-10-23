@@ -1,5 +1,5 @@
 import { draftContentPatch } from "@/lib/step-content";
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { TopBar } from "@/components/layout/TopBar";
 import { validateMdx, summarizeDiff, type MdxIssue } from "@/lib/mdx-validate";
@@ -131,21 +131,26 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
   const [markdown, setMarkdown] = useState("");
   const [previewMarkdown, setPreviewMarkdown] = useState("");
 
+  // Latest phases for the selection effects below: they must run only when the selection changes, not on every
+  // phases refresh (an autosave refetch would otherwise overwrite what the user is typing).
+  const phasesRef = useRef(phases);
+  useLayoutEffect(() => {
+    phasesRef.current = phases;
+  });
+  const activeStepId = activeStepRef?.stepId;
+
   // Sync local editor state when selection changes
   useEffect(() => {
-    const activeStepFound = (() => {
-      if (!activeStepRef) return null;
-      for (const p of phases) {
-        const found = p.steps.find((s) => s.id === activeStepRef.stepId);
-        if (found) return found;
+    if (!activeStepId) return;
+    for (const p of phasesRef.current) {
+      const found = p.steps.find((s) => s.id === activeStepId);
+      if (found) {
+        setMarkdown(found.markdown);
+        setPreviewMarkdown(found.markdown);
+        return;
       }
-      return null;
-    })();
-    if (activeStepFound) {
-      setMarkdown(activeStepFound.markdown);
-      setPreviewMarkdown(activeStepFound.markdown);
     }
-  }, [activeStepRef?.stepId]);
+  }, [activeStepId]);
 
   // Debounce expensive preview updates (AST parsing, Shiki, Mermaid)
   useEffect(() => {
@@ -178,11 +183,9 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
       })) as PhaseNode[];
       setPhases(mapped);
 
-      if (!activeStepRef) {
-        const firstStep = mapped[0]?.steps?.[0];
-        if (firstStep) {
-          setActiveStepRef({ phaseId: mapped[0].id, stepId: firstStep.id });
-        }
+      const firstStep = mapped[0]?.steps?.[0];
+      if (firstStep) {
+        setActiveStepRef((current) => current ?? { phaseId: mapped[0].id, stepId: firstStep.id });
       }
     }
   }, [dbBookStructure]);
@@ -270,11 +273,6 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
   useEffect(() => {
     markdownRef.current = markdown;
   }, [markdown]);
-
-  const phasesRef = useRef(phases);
-  useEffect(() => {
-    phasesRef.current = phases;
-  }, [phases]);
 
   // Auto-save state and refs
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
@@ -374,7 +372,7 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
         updates: { title: newTitle },
       });
       showToast("Phase title updated", "success");
-    } catch (err) {
+    } catch {
       showToast("Failed to update phase title", "error");
     }
   }, [bookId, updatePhaseMutation, showToast]);
@@ -416,7 +414,7 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
           )
         );
         showToast("Phases reordered", "success");
-      } catch (err) {
+      } catch {
         showToast("Failed to save reordering", "error");
       }
     }
@@ -450,7 +448,7 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
       await deletePhaseMutation.mutateAsync({ phaseId, bookId });
       setPhases((prev) => prev.filter((x) => x.id !== phaseId));
       showToast("Phase deleted", "info");
-    } catch (err) {
+    } catch {
       showToast("Failed to delete phase", "error");
     }
   }, [phases, bookId, deletePhaseMutation, showToast]);
@@ -522,7 +520,7 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
         setActiveStepRef(null);
       }
       showToast("Step deleted", "info");
-    } catch (err) {
+    } catch {
       showToast("Failed to delete step", "error");
     }
   }, [activeStepRef, bookId, deleteStepMutation, showToast]);
@@ -534,7 +532,7 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
     try {
       const result = parseMarkdownToTree(rawMd);
       setParsed(result);
-    } catch (err) {
+    } catch {
       showToast("Failed to parse Markdown", "error");
     }
   };
@@ -571,7 +569,7 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
       setTab("editor");
       setRawMd("");
       setParsed(null);
-    } catch (err) {
+    } catch {
       showToast("Failed to import Markdown", "error");
     }
   };
@@ -583,8 +581,13 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
   const [initialStepMarkdown, setInitialStepMarkdown] = useState("");
 
   useEffect(() => {
-    if (activeStep) {
-      setInitialStepMarkdown(activeStep.markdown);
+    if (!activeStepRef) return;
+    for (const p of phasesRef.current) {
+      const found = p.steps.find((s) => s.id === activeStepRef.stepId);
+      if (found) {
+        setInitialStepMarkdown(found.markdown);
+        return;
+      }
     }
   }, [activeStepRef]);
 
@@ -648,7 +651,7 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
       setInitialStepMarkdown(activeStep?.markdown || "");
       setPublishOpen(false);
       showToast("Book published successfully", "success");
-    } catch (err) {
+    } catch {
       showToast("Failed to publish book", "error");
     }
   };
@@ -789,7 +792,7 @@ export function BookEditorPage({ bookId, onBack, onPreview }: Props) {
     try {
       await updateBookMutation.mutateAsync({ bookId, updates: { access_level: next } });
       showToast(`Book visibility set to ${visibilityLabel(next)}`, "success");
-    } catch (err) {
+    } catch {
       showToast("Failed to update visibility", "error");
     }
   };

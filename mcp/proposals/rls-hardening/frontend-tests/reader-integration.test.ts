@@ -88,7 +88,7 @@ await test("parity: tree-derived steps equal the OLD getBookStructure(reader) ob
     const visible = new Set(treeStepIds(tree));
     const phases = F.raw.phases.filter((p: any) => p.book_id === B.PUB);
     const old = legacyStructure(phases, F.raw.steps.filter((s: any) => visible.has(s.id))).filter((p: any) => p.steps.length > 0);
-    const now = JSON.parse(JSON.stringify(treeToStructure(tree).map((p) => ({ ...p, steps: p.steps.map(({ attachments, ...rest }) => rest) }))));
+    const now = JSON.parse(JSON.stringify(treeToStructure(tree).map((p) => ({ ...p, steps: p.steps.map(({ attachments: _attachments, ...rest }) => rest) }))));
     assert.deepEqual(now.map((p: any) => [p.id, p.title, p.steps.map((s: any) => s.id)]), old.map((p: any) => [p.id, p.title, p.steps.map((s: any) => s.id)]), actor + " structure");
     for (const [pi, p] of now.entries()) for (const [si, s] of p.steps.entries()) {
       const o = old[pi].steps[si];

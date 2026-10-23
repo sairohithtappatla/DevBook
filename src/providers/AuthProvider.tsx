@@ -1,37 +1,7 @@
-import { createContext, useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { AuthService } from "@/services/auth.service";
 import { type User, type Session } from "@/types/user";
-
-export const AuthState = {
-  INITIALIZING: "INITIALIZING",
-  UNAUTHENTICATED: "UNAUTHENTICATED",
-  SIGNING_UP: "SIGNING_UP",
-  PENDING_VERIFICATION: "PENDING_VERIFICATION",
-  AUTHENTICATED: "AUTHENTICATED",
-  SESSION_EXPIRED: "SESSION_EXPIRED",
-  RESETTING_PASSWORD: "RESETTING_PASSWORD"
-} as const;
-
-export type AuthState = typeof AuthState[keyof typeof AuthState];
-
-export interface AuthContextType {
-  user: User | null;
-  session: Session | null;
-  authState: AuthState;
-  isAuthenticated: boolean;
-  isEmailVerified: boolean;
-  isInitializing: boolean;
-  signUp: (email: string, password: string, name?: string) => Promise<{ user: User | null; requireEmailVerification: boolean }>;
-  signIn: (email: string, password: string) => Promise<{ user: User; session: Session }>;
-  verifyEmail: (email: string, otp: string) => Promise<{ user: User; session: Session }>;
-  resendCode: (email: string) => Promise<boolean>;
-  forgotPassword: (email: string) => Promise<boolean>;
-  exchangeResetCode: (email: string, code: string) => Promise<string>;
-  resetPassword: (newPassword: string, token: string) => Promise<boolean>;
-  signOut: () => Promise<void>;
-}
-
-export const AuthContext = createContext<AuthContextType | undefined>(undefined);
+import { AuthContext, AuthState } from "@/providers/auth-context";
 
 type Props = {
   children: ReactNode;
@@ -174,16 +144,12 @@ export function AuthProvider({ children }: Props) {
   };
 
   const verifyEmail = async (email: string, otp: string) => {
-    try {
-      const result = await AuthService.verifyEmail(email, otp);
-      setUser(result.user);
-      setSession(result.session);
-      setAuthState(AuthState.AUTHENTICATED);
-      triggerTabSync();
-      return result;
-    } catch (error) {
-      throw error;
-    }
+    const result = await AuthService.verifyEmail(email, otp);
+    setUser(result.user);
+    setSession(result.session);
+    setAuthState(AuthState.AUTHENTICATED);
+    triggerTabSync();
+    return result;
   };
 
   const resendCode = async (email: string) => {
